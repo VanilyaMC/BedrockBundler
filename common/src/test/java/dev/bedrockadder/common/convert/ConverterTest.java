@@ -226,9 +226,31 @@ class ConverterTest {
     }
 
     @Test
+    void blockMappings() {
+        JsonObject root = Json.parse(result.blockMappings()).getAsJsonObject();
+        assertEquals(1, root.get("format_version").getAsInt());
+        JsonObject noteBlock = root.getAsJsonObject("blocks").getAsJsonObject("minecraft:note_block");
+        // Geyser parses the key as a resource location: the block id only, states go into state_overrides.
+        assertEquals("bedrockadder_note_block", noteBlock.get("name").getAsString());
+        assertTrue(noteBlock.get("only_override_states").getAsBoolean());
+        JsonObject overrides = noteBlock.getAsJsonObject("state_overrides");
+        assertEquals(2, overrides.size());
+        JsonObject ore = overrides.getAsJsonObject("instrument=banjo,note=3,powered=false");
+        assertEquals("minecraft:geometry.full_block", ore.get("geometry").getAsString());
+        assertEquals("Ruby Ore", ore.get("display_name").getAsString());
+        JsonObject up = ore.getAsJsonObject("material_instances").getAsJsonObject("up");
+        assertEquals("bedrockadder.block.test_block_ruby_ore", up.get("texture").getAsString());
+        JsonObject slab = overrides.getAsJsonObject("instrument=banjo,note=4,powered=false");
+        assertEquals("geometry.bedrockadder.block.test_ruby_slab", slab.get("geometry").getAsString());
+        assertEquals(270, slab.getAsJsonObject("transformation").getAsJsonArray("rotation").get(1).getAsInt());
+        assertEquals(7, slab.get("light_emission").getAsInt());
+    }
+
+    @Test
     void bundleRoundTrip() throws IOException {
         Path dir = Files.createTempDirectory("bundle");
-        result.bundle().write(dir, result.mcpack(), result.mappings());
+        result.bundle().write(dir, result.mcpack(), result.mappings(), result.blockMappings());
+        assertTrue(Files.isRegularFile(dir.resolve(Bundle.BLOCK_MAPPINGS_FILE)));
         byte[] zip = Bundle.zip(dir);
         Path copy = Files.createTempDirectory("bundle-copy");
         Bundle.unzip(new ByteArrayInputStream(zip), copy);
