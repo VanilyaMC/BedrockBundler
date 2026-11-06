@@ -1,5 +1,7 @@
-package dev.bedrockadder.paper;
+package dev.bedrockadder.paper.itemsadder;
 
+import dev.bedrockadder.paper.BedrockAdderPlugin;
+import dev.bedrockadder.paper.Scheduling;
 import dev.lone.itemsadder.api.Events.ItemsAdderLoadDataEvent;
 import dev.lone.itemsadder.api.Events.ItemsAdderPackCompressedEvent;
 import org.bukkit.event.EventHandler;
@@ -28,7 +30,7 @@ final class ItemsAdderListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPackCompressed(ItemsAdderPackCompressedEvent event) {
         packEventSeen = true;
-        if (!plugin.settings().autoConvert()) {
+        if (!plugin.autoConvert()) {
             return;
         }
         // Copy now: entries may be backed by streams that are only valid during the event.
@@ -40,19 +42,15 @@ final class ItemsAdderListener implements Listener {
                 files.put(entry.getPath(), entry.getBytes());
             }
         }
-        if (plugin.getServer().isPrimaryThread()) {
-            plugin.conversion().convert(files, false, null);
-        } else {
-            plugin.getServer().getScheduler().runTask(plugin, () -> plugin.conversion().convert(files, false, null));
-        }
+        Scheduling.global(plugin, () -> plugin.convert(files, false, null));
     }
 
     @EventHandler
     public void onLoadData(ItemsAdderLoadDataEvent event) {
-        if (!"FIRST_LOAD".equals(String.valueOf(event.getCause())) || !plugin.settings().autoConvert()) {
+        if (!"FIRST_LOAD".equals(String.valueOf(event.getCause())) || !plugin.autoConvert()) {
             return;
         }
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+        Scheduling.globalLater(plugin, () -> {
             if (!packEventSeen) {
                 plugin.convertFromDisk(false, null);
             }

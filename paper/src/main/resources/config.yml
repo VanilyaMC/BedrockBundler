@@ -1,6 +1,10 @@
-# BedrockAdder: ItemsAdder content for Bedrock players on Geyser.
+# BedrockAdder: Nexo and ItemsAdder content for Bedrock players on Geyser.
 
-# Convert automatically whenever ItemsAdder builds its resource pack (/iazip, /iareload).
+# Which content plugin to convert: AUTO (Nexo if installed, else ItemsAdder), NEXO or ITEMSADDER.
+source: AUTO
+
+# Convert automatically whenever the content plugin builds its resource pack (Nexo: on start and /nexo reload;
+# ItemsAdder: /iazip, /iareload).
 auto-convert: true
 
 # Name of the generated Bedrock resource pack. Changing it makes Bedrock players download it again.
@@ -23,8 +27,8 @@ fonts:
   gui-offset-x: -16
 
 furniture:
-  # Show ItemsAdder furniture (item_display) to Bedrock players with an invisible armor stand that only
-  # Bedrock players see. Needs Floodgate (or Geyser-Spigot on this server).
+  # Show furniture (Nexo/ItemsAdder item displays) to Bedrock players with an invisible armor stand that only
+  # Bedrock players see. Needs Floodgate (or Geyser-Spigot on this server). Works on Folia/Canvas.
   enabled: true
   # Fine-tuning if furniture appears turned or shifted on Bedrock (degrees / blocks).
   yaw-offset: 0

@@ -2,7 +2,7 @@ package dev.bedrockadder.paper;
 
 import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
 import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
-import dev.lone.itemsadder.api.CustomStack;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
@@ -18,68 +18,90 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Transformation;
 import org.joml.Vector3f;
 
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 
 /**
- * Makes ItemsAdder furniture visible on Bedrock.
+ * Makes furniture (item displays of the content plugin) visible on Bedrock.
  *
- * <p>ItemsAdder draws furniture with {@code item_display} entities, which Bedrock does not have. For every
- * display that shows an ItemsAdder item, this keeps an invisible marker armor stand wearing the same item,
- * shown only to Bedrock players. Geyser renders the item on the stand's head through the item's attachable,
- * whose "furniture" pose (see the converter) draws the model like the display would.
+ * <p>Bedrock has no item display entity. For every furniture display this keeps an invisible marker armor stand
+ * wearing the same item, shown only to Bedrock players. Geyser renders the item on the stand's head through the
+ * item's attachable, whose "furniture" pose (see the converter) draws the model like the display would.
+ *
+ * <p>Region-threading safe (Folia, Canvas): each display is handled by a task on the display's own entity
+ * scheduler, the stand is spawned at the display's position (same region) and moved with
+ * {@code teleportAsync}, and players are only touched on their own scheduler. On Paper the same schedulers run on
+ * the main thread.
  */
 final class FurnitureMirror implements Listener {
 
     private static final String TAG = "bedrockadder_furniture_mirror";
     private static final long SYNC_TICKS = 10;
-    /** Displays get their item a moment after spawning; keep checking new ones for this many syncs. */
+    /** Displays get their item a moment after spawning; keep checking new ones this many times. */
     private static final int PENDING_ATTEMPTS = 6;
 
     private final BedrockAdderPlugin plugin;
     private final BedrockPlayers bedrock;
+    private final ContentSource source;
     private final float yawOffset;
     private final double yOffset;
-    private final Map<UUID, ArmorStand> mirrors = new HashMap<>();
-    private final Map<UUID, Integer> pending = new HashMap<>();
-    private BukkitTask task;
+    /** Display UUID -> mirror stand. Written from many region threads. */
+    private final Map<UUID, ArmorStand> mirrors = new ConcurrentHashMap<>();
+    /** Display UUID -> its sync task, so a display is never tracked twice. */
+    private final Map<UUID, ScheduledTask> tasks = new ConcurrentHashMap<>();
+    /** Online Bedrock players, so region threads never have to ask Floodgate about everyone. */
+    private final Map<UUID, Player> bedrockPlayers = new ConcurrentHashMap<>();
+    private volatile boolean running;
 
-    FurnitureMirror(BedrockAdderPlugin plugin, BedrockPlayers bedrock, float yawOffset, double yOffset) {
+    FurnitureMirror(BedrockAdderPlugin plugin, BedrockPlayers bedrock, ContentSource source, float yawOffset, double yOffset) {
         this.plugin = plugin;
         this.bedrock = bedrock;
+        this.source = source;
         this.yawOffset = yawOffset;
         this.yOffset = yOffset;
     }
 
     void start() {
+        running = true;
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        for (World world : plugin.getServer().getWorlds()) {
-            for (Entity entity : world.getEntities()) {
-                if (entity.getScoreboardTags().contains(TAG)) {
-                    entity.remove(); // left over from a crash; mirrors are never saved, but be safe
-                } else if (entity instanceof ItemDisplay) {
-                    pending.put(entity.getUniqueId(), 0);
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
+            player.getScheduler().run(plugin, t -> {
+                if (bedrock.isBedrock(player)) {
+                    bedrockPlayers.put(player.getUniqueId(), player);
+                }
+            }, null);
+        }
+        if (!Scheduling.isFolia()) {
+            // Displays already loaded (plugin reload). Folia has no global entity list; there, chunks loading
+            // later fire EntityAddToWorldEvent, and mirrors are never saved, so nothing is left to clean up.
+            for (World world : plugin.getServer().getWorlds()) {
+                for (Entity entity : world.getEntities()) {
+                    if (entity.getScoreboardTags().contains(TAG)) {
+                        entity.remove();
+                    } else if (entity instanceof ItemDisplay display) {
+                        track(display);
+                    }
                 }
             }
         }
-        task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::sync, 1, SYNC_TICKS);
     }
 
     void stop() {
-        if (task != null) {
-            task.cancel();
-        }
+        running = false;
         HandlerList.unregisterAll(this);
-        mirrors.values().forEach(Entity::remove);
+        tasks.values().forEach(ScheduledTask::cancel);
+        tasks.clear();
+        for (ArmorStand mirror : mirrors.values()) {
+            removeMirror(mirror);
+        }
         mirrors.clear();
-        pending.clear();
+        bedrockPlayers.clear();
     }
 
     int count() {
@@ -88,81 +110,100 @@ final class FurnitureMirror implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onAdd(EntityAddToWorldEvent event) {
-        if (event.getEntity() instanceof ItemDisplay) {
-            pending.put(event.getEntity().getUniqueId(), 0);
+        if (event.getEntity() instanceof ItemDisplay display) {
+            track(display);
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onRemove(EntityRemoveFromWorldEvent event) {
         if (event.getEntity() instanceof ItemDisplay) {
-            pending.remove(event.getEntity().getUniqueId());
-            ArmorStand mirror = mirrors.remove(event.getEntity().getUniqueId());
-            if (mirror != null) {
-                mirror.remove();
-            }
+            untrack(event.getEntity().getUniqueId());
         }
     }
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        // Floodgate may need a tick to register the session.
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+        // Floodgate may need a moment to register the session.
+        player.getScheduler().runDelayed(plugin, t -> {
             if (player.isOnline() && bedrock.isBedrock(player)) {
+                bedrockPlayers.put(player.getUniqueId(), player);
                 for (ArmorStand mirror : mirrors.values()) {
-                    player.showEntity(plugin, mirror);
+                    show(player, mirror);
                 }
             }
-        }, 5);
+        }, null, 5);
     }
 
-    private void sync() {
-        Iterator<Map.Entry<UUID, Integer>> pendingIterator = pending.entrySet().iterator();
-        while (pendingIterator.hasNext()) {
-            Map.Entry<UUID, Integer> entry = pendingIterator.next();
-            Entity entity = plugin.getServer().getEntity(entry.getKey());
-            if (!(entity instanceof ItemDisplay display) || !display.isValid()) {
-                pendingIterator.remove();
-            } else if (isItemsAdderDisplay(display)) {
-                createMirror(display);
-                pendingIterator.remove();
-            } else if (entry.getValue() >= PENDING_ATTEMPTS) {
-                pendingIterator.remove();
-            } else {
-                entry.setValue(entry.getValue() + 1);
-            }
-        }
-
-        Iterator<Map.Entry<UUID, ArmorStand>> iterator = mirrors.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<UUID, ArmorStand> entry = iterator.next();
-            Entity entity = plugin.getServer().getEntity(entry.getKey());
-            ArmorStand mirror = entry.getValue();
-            if (!(entity instanceof ItemDisplay display) || !display.isValid() || !mirror.isValid()) {
-                mirror.remove();
-                iterator.remove();
-                continue;
-            }
-            update(display, mirror);
-        }
+    @EventHandler
+    public void onQuit(org.bukkit.event.player.PlayerQuitEvent event) {
+        bedrockPlayers.remove(event.getPlayer().getUniqueId());
     }
 
-    private static boolean isItemsAdderDisplay(ItemDisplay display) {
-        ItemStack item = display.getItemStack();
-        return item != null && !item.getType().isAir() && CustomStack.byItemStack(item) != null;
-    }
-
-    private void createMirror(ItemDisplay display) {
-        if (mirrors.containsKey(display.getUniqueId())) {
+    /** Starts the per-display task on the display's own thread. */
+    private void track(ItemDisplay display) {
+        UUID id = display.getUniqueId();
+        if (!running || tasks.containsKey(id)) {
             return;
         }
+        int[] attempts = {0};
+        ScheduledTask task = display.getScheduler().runAtFixedRate(plugin, t -> {
+            ArmorStand mirror = mirrors.get(id);
+            if (mirror == null) {
+                boolean created = false;
+                if (source.isFurniture(display)) {
+                    try {
+                        createMirror(display);
+                        created = true;
+                    } catch (RuntimeException e) {
+                        // e.g. a translation that reaches into a chunk owned by another region
+                        plugin.getLogger().log(Level.FINE, "Could not mirror furniture " + display.getUniqueId(), e);
+                    }
+                }
+                if (!created && ++attempts[0] >= PENDING_ATTEMPTS) {
+                    t.cancel();
+                    tasks.remove(id);
+                }
+                return;
+            }
+            if (!mirror.isValid()) {
+                mirrors.remove(id);
+                return; // recreated on the next run
+            }
+            update(display, mirror);
+        }, () -> untrack(id), 1, SYNC_TICKS);
+        if (task != null) {
+            tasks.put(id, task);
+        }
+    }
+
+    private void untrack(UUID displayId) {
+        ScheduledTask task = tasks.remove(displayId);
+        if (task != null) {
+            task.cancel();
+        }
+        ArmorStand mirror = mirrors.remove(displayId);
+        if (mirror != null) {
+            removeMirror(mirror);
+        }
+    }
+
+    private void removeMirror(ArmorStand mirror) {
+        // The stand may sit in another region by now; remove it on its own thread.
+        if (!mirror.getScheduler().execute(plugin, mirror::remove, null, 1L) && !Scheduling.isFolia()) {
+            mirror.remove();
+        }
+    }
+
+    /** Runs on the display's thread; the stand spawns at the display's position, so in the same region. */
+    private void createMirror(ItemDisplay display) {
         ArmorStand mirror = display.getWorld().spawn(target(display), ArmorStand.class, stand -> {
             stand.setVisibleByDefault(false); // Java players never see it
             stand.setPersistent(false);       // never saved with the chunk
             stand.addScoreboardTag(TAG);
             stand.setInvisible(true);
-            stand.setMarker(true);            // no hitbox: clicks reach ItemsAdder's own hitbox entities
+            stand.setMarker(true);            // no hitbox: clicks reach the plugin's own hitbox entities
             stand.setGravity(false);
             stand.setSilent(true);
             stand.setInvulnerable(true);
@@ -177,10 +218,17 @@ final class FurnitureMirror implements Listener {
         });
         mirrors.put(display.getUniqueId(), mirror);
         update(display, mirror);
-        for (Player player : plugin.getServer().getOnlinePlayers()) {
-            if (bedrock.isBedrock(player)) {
-                player.showEntity(plugin, mirror);
-            }
+        for (Player player : bedrockPlayers.values()) {
+            player.getScheduler().run(plugin, t -> show(player, mirror), null);
+        }
+    }
+
+    private void show(Player player, ArmorStand mirror) {
+        try {
+            player.showEntity(plugin, mirror);
+        } catch (RuntimeException e) {
+            // A stand in a far region; it is shown again when the player rejoins.
+            plugin.getLogger().log(Level.FINE, "Could not show a furniture mirror to " + player.getName(), e);
         }
     }
 
@@ -197,7 +245,7 @@ final class FurnitureMirror implements Listener {
         Location target = target(display);
         Location current = mirror.getLocation();
         if (current.distanceSquared(target) > 1.0E-6 || Math.abs(current.getYaw() - target.getYaw()) > 0.01f) {
-            mirror.teleport(target);
+            mirror.teleportAsync(target);
         }
     }
 

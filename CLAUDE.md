@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-BedrockAdder is a beta Paper plugin plus Geyser extension that makes ItemsAdder content (items, 3D models, blocks, armor, furniture, font images, GUI backgrounds) visible to Bedrock players. It converts locally on the server; there is no hosted converter. Licensed AGPL-3.0-only.
+BedrockAdder is a beta Paper plugin plus Geyser extension that makes Nexo and ItemsAdder content (items, 3D models, blocks, armor, furniture, font images, GUI backgrounds) visible to Bedrock players. It converts locally on the server; there is no hosted converter. Licensed AGPL-3.0-only.
 
 ## Build and test
 
@@ -13,7 +13,8 @@ BedrockAdder is a beta Paper plugin plus Geyser extension that makes ItemsAdder 
 ./gradlew :common:test --tests "*ConverterTest.legacyCustomModelDataItem"
 ```
 
-- `paper` compiles against `libs/ItemsAdder-*.jar` (`compileOnly` fileTree). The jar is a paid plugin: git-ignored, never commit or redistribute it. Without it only `common` and `geyser-extension` build.
+- `paper` compiles against the public Nexo API (`repo.nexomc.com`). The ItemsAdder hook (`paper/src/itemsadder/java`) is only compiled when `libs/ItemsAdder-*.jar` exists; that jar is a paid plugin: git-ignored, never commit or redistribute it.
+- `cli` is the offline converter for a Nexo folder (`NexoFolder`, `NexoBlockStates`), with its own tests.
 - No Java toolchain is configured: any JDK 21+ builds, `options.release = 21`.
 - Outputs:
   - `paper/build/libs/BedrockAdder-<version>.jar`, the server plugin. Its `processResources` embeds the extension shadow jar as `BedrockAdderExtension.jar`.
@@ -25,6 +26,7 @@ BedrockAdder is a beta Paper plugin plus Geyser extension that makes ItemsAdder 
 Three Gradle modules. Data flows plugin → bundle → extension:
 
 1. **`paper`**
+   - A `ContentSource` (`nexo.NexoSource`, `itemsadder.ItemsAdderSource`, the latter loaded by name) snapshots the registry and reads the generated pack. Threads go through `Scheduling` (Paper's region schedulers), so the plugin is Folia/Canvas-safe.
    - `ItemsAdderListener` receives the generated pack from `ItemsAdderPackCompressedEvent`. When ItemsAdder doesn't rebuild an unchanged pack, it falls back to reading `ItemsAdder/output/generated.zip` 5 s after `FIRST_LOAD`.
    - `IaRegistryReader` snapshots the ItemsAdder registry into `IaItem`/`IaBlock` records on the server thread.
    - `ConversionService` converts on a single background thread and writes a **bundle** to `plugins/BedrockAdder/bundle/`. A `Deployer` then delivers it: `LocalGeyserDeployer` (Geyser-Spigot on the same server; also installs the embedded extension jar), `FolderDeployer` or `HttpDeployer`.
@@ -35,7 +37,7 @@ Three Gradle modules. Data flows plugin → bundle → extension:
    - On `GeyserPreInitializeEvent` it syncs per `config.properties` (`LOCAL`/`FOLDER`/`HTTP`), copies `bundle/` to `active/` and loads it.
    - It then registers items via the API (`GeyserDefineCustomItemsEvent`), blocks with `registerOverride(javaState, ...)`, and the pack from `active/`.
 
-Furniture is runtime, not conversion: `FurnitureMirror` (paper) spawns a non-persistent, invisible marker armor stand per ItemsAdder `item_display`. The stand is `setVisibleByDefault(false)` and shown only to Bedrock players (`BedrockPlayers`: Floodgate, else Geyser API), and wears the display's item. The item's attachable has a `furniture` pose used when `q.owner_identifier == 'minecraft:armor_stand'`. Geyser's API cannot tell an extension which item a display entity shows, hence this design.
+Furniture is runtime, not conversion: `FurnitureMirror` (paper) spawns a non-persistent, invisible marker armor stand per furniture `item_display` (Nexo or ItemsAdder), from a task on the display's own entity scheduler. The stand is `setVisibleByDefault(false)` and shown only to Bedrock players (`BedrockPlayers`: Floodgate, else Geyser API), and wears the display's item. The item's attachable has a `furniture` pose used when `q.owner_identifier == 'minecraft:armor_stand'`. Geyser's API cannot tell an extension which item a display entity shows, hence this design.
 
 ## Invariants that are easy to break
 
