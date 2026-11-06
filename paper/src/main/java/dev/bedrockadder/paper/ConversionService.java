@@ -123,7 +123,7 @@ final class ConversionService {
 
             long start = System.nanoTime();
             Converter.Result result = Converter.convert(input, options, packName);
-            result.bundle().write(bundleFolder, result.mcpack(), result.mappings());
+            result.bundle().write(bundleFolder, result.mcpack(), result.mappings(), result.blockMappings());
             writeWarnings(result.warnings(), skippedBlocks);
             deployer.deploy(bundleFolder);
 
