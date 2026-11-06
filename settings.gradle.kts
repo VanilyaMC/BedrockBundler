@@ -1,3 +1,3 @@
 rootProject.name = "BedrockAdder"
 
-include("common", "paper", "geyser-extension")
+include("common", "paper", "geyser-extension", "cli")

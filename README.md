@@ -4,21 +4,21 @@
 > **BedrockAdder is in beta.** It works on the setups it was tested on, but expect bugs and breaking changes
 > between versions. Back up your server before trying it, and please report problems.
 
-Makes [ItemsAdder](https://itemsadder.devs.beer/) content visible to Bedrock players who join through
-[Geyser](https://geysermc.org/).
+Makes [Nexo](https://nexomc.com/) and [ItemsAdder](https://itemsadder.devs.beer/) content visible to Bedrock
+players who join through [Geyser](https://geysermc.org/).
 
-ItemsAdder only draws its content with a Java resource pack, so Bedrock players normally see plain paper, note
-blocks and missing furniture. BedrockAdder reads the pack ItemsAdder generates and converts it **on your server**:
-there is no external conversion service and no manual pack work.
+Nexo and ItemsAdder only draw their content with a Java resource pack, so Bedrock players normally see plain paper,
+note blocks and missing furniture. BedrockAdder reads the pack the plugin generates and converts it **on your
+server**: there is no external conversion service and no manual pack work.
 
 ## How it works
 
-1. You run `/iazip` (or ItemsAdder rebuilds its pack). BedrockAdder receives the pack and a snapshot of the
-   ItemsAdder registry, and converts them off the main thread.
+1. The content plugin builds its pack (Nexo: on start and `/nexo reload`; ItemsAdder: `/iazip`). BedrockAdder
+   reads the pack and a snapshot of the plugin's item and block registry, and converts them off the main thread.
 2. The result is a *bundle*: a Bedrock resource pack (`.mcpack`) plus custom item and block definitions.
 3. The BedrockAdder **Geyser extension** registers the items, blocks and pack when Geyser starts. On a
    Geyser-Spigot server the extension installs itself.
-4. While the server runs, BedrockAdder shows ItemsAdder furniture to Bedrock players.
+4. While the server runs, BedrockAdder shows furniture (item displays) to Bedrock players.
 
 Geyser only loads custom content when it starts, so **restart after each conversion**.
 
@@ -38,6 +38,10 @@ Geyser only loads custom content when it starts, so **restart after each convers
 - [x] GUI backgrounds (textured inventories such as `/ia`) on the classic chest screen
 - [x] ItemsAdder's pack protection: overlays, `ia:N` sprite aliases, protected PNGs and zips
 - [x] Same-server Geyser-Spigot, and proxy/standalone Geyser through a shared folder or HTTP
+- [x] Custom blocks also exported as Geyser JSON block mappings, for Geyser installs that use plain `custom_mappings`
+- [x] Nexo 1.2x-1.30: items, note/string/chorus blocks, furniture (including evolving crops), armor, 3D hats, glyphs
+- [x] Folia and Folia forks (Canvas): region-safe furniture mirrors and scheduling
+- [x] Offline converter (`BedrockAdder-cli.jar`) for a Nexo folder, without a running server
 - [x] Skips unchanged conversions; warnings are written to `plugins/BedrockAdder/warnings.txt`
 
 ### Planned
@@ -64,7 +68,7 @@ documentation does not say; `—` means the row does not apply.
 
 | | **BedrockAdder** | **Nexo Scaffolding** | **GeyserMC Rainbow** | **Chest-GUI-Generator** | **ItemsAdder alone** |
 |---|---|---|---|---|---|
-| Works with | ItemsAdder | Nexo | Any server (client mod) | Any Java chest GUI pack | — |
+| Works with | ItemsAdder, Nexo | Nexo | Any server (client mod) | Any Java chest GUI pack | — |
 | How you run it | Server plugin + Geyser extension | Server plugin + optional Geyser extension | Fabric client mod | Browser tool | — |
 | Where conversion runs | Locally, on your server | Hosted converter (self-hosted converter jar optional) | On your client | In your browser | — |
 | Automatic on pack rebuild | ✅ | ✅ | ❌ | ❌ | — |
@@ -86,7 +90,8 @@ documentation does not say; `—` means the row does not apply.
 |---|---|
 | Server | Paper 1.21.4+ or a fork (Purpur, Leaf, ...) |
 | Java | 21+ |
-| ItemsAdder | 4.0.x (tested with 4.0.18) |
+| ItemsAdder | 4.0.x (tested with 4.0.18), or |
+| Nexo | 1.29+ (built against the 1.29.1 API, read against 1.30-dev) |
 | Geyser | 2.11.0+ (tested with 2.12.0) |
 | Floodgate | Recommended; required for furniture when Geyser runs on a proxy |
 
@@ -116,13 +121,38 @@ Tested on Leaf 1.21.11 with Geyser-Spigot 2.12, Floodgate and ViaVersion, and on
 > If your server runs with a Turkish system language, start Java with `-Duser.language=en -Duser.country=US`.
 > Otherwise ItemsAdder turns `item_display` into `İTEM_DİSPLAY` and fails to build its pack.
 
+### Nexo
+
+Install BedrockAdder next to Nexo; it is picked automatically (`source: AUTO`). BedrockAdder converts once Nexo has
+loaded its items and after every pack build (`/nexo reload`), reading the pack from Nexo's
+`Pack.generation.output_path` (default `plugins/Nexo/pack/pack.zip`). Item models, block states and furniture come from
+Nexo's API, so obfuscated packs and Nexo's own block state encoding work unchanged. Nexo furniture uses
+`display_transform: NONE`, which BedrockAdder follows for the furniture pose.
+
+### Offline converter
+
+`cli/build/libs/BedrockAdder-cli-<version>.jar` converts a Nexo folder without a server, for example for a
+Geyser-Standalone that loads plain mappings:
+
+```
+java -jar BedrockAdder-cli.jar --nexo plugins/Nexo --out build/bedrock \
+     [--pack plugins/Nexo/pack/pack.zip] [--geyser /path/to/geyser] [--pack-name MyPack] [--prefix mypack]
+```
+
+With `--pack` it converts Nexo's generated pack. Without it, it assembles the pack from `pack/assets` and
+`pack/external_packs` and adds what Nexo would generate for blocks (block state variants from `custom_variation`) and
+glyphs (font providers). `--geyser` writes `packs/<pack-name>.mcpack`, `custom_mappings/<prefix>_items.json` and
+`custom_mappings/<prefix>_blocks.json`. Furniture still needs the plugin on the server (or another way to render item
+displays on Bedrock).
+
 ## Configuration
 
 `plugins/BedrockAdder/config.yml`:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `auto-convert` | `true` | Convert whenever ItemsAdder builds its pack |
+| `source` | `AUTO` | `AUTO` (Nexo if installed, else ItemsAdder), `NEXO` or `ITEMSADDER` |
+| `auto-convert` | `true` | Convert whenever the content plugin builds its pack |
 | `pack-name` | `BedrockAdder` | Name of the Bedrock pack; changing it makes players download it again |
 | `icon-size` | `64` | Size of rendered icons for 3D items |
 | `fonts.enabled` | `true` | Convert font images and GUI backgrounds |
@@ -136,15 +166,16 @@ Tested on Leaf 1.21.11 with Geyser-Spigot 2.12, Floodgate and ViaVersion, and on
 
 | Command | Description |
 |---|---|
-| `/bedrockadder reload [-f]` (`/ba`) | Convert from `ItemsAdder/output/generated.zip`; `-f` converts even when nothing changed |
+| `/bedrockadder reload [-f]` (`/ba`) | Convert from the content plugin's generated pack; `-f` converts even when nothing changed |
 | `/bedrockadder status` | Last conversion, deploy target, and whether Geyser needs a restart |
 
 Permission: `bedrockadder.admin` (op by default).
 
 ## Building from source
 
-ItemsAdder is a paid plugin and is not on any public repository. Put your licensed jar at
-`libs/ItemsAdder-<version>.jar`; the folder is git-ignored and must never be committed. Then run:
+ItemsAdder is a paid plugin and is not on any public repository. Its hook (`paper/src/itemsadder/java`) is only
+compiled when your licensed jar is at `libs/ItemsAdder-<version>.jar`; the folder is git-ignored and must never be
+committed. Without it the plugin builds with Nexo support only (the Nexo API comes from `repo.nexomc.com`). Run:
 
 ```
 ./gradlew build
@@ -154,12 +185,14 @@ This builds two jars:
 
 - `paper/build/libs/BedrockAdder-<version>.jar`: the server plugin, with the Geyser extension inside.
 - `geyser-extension/build/libs/BedrockAdderExtension-<version>.jar`: needed only for proxy or standalone Geyser.
+- `cli/build/libs/BedrockAdder-cli-<version>.jar`: the offline converter.
 
 | Module | Contents |
 |---|---|
 | `common` | The converter: Java pack reader, model resolver, Bedrock pack writer, specs. No Bukkit or Geyser dependency. |
-| `paper` | Bukkit plugin: ItemsAdder hook, conversion service, deployers, furniture mirrors |
+| `paper` | Bukkit plugin: content sources (Nexo, ItemsAdder), conversion service, deployers, furniture mirrors |
 | `geyser-extension` | Geyser extension: registers items, blocks and the pack |
+| `cli` | Offline converter for a Nexo folder |
 
 ## License
 
@@ -175,8 +208,8 @@ FITNESS FOR A PARTICULAR PURPOSE. See the [LICENSE](LICENSE) file for details.
 If you run a modified version of BedrockAdder on a server that players connect to, the AGPL requires you to
 offer those players the source code of your modified version.
 
-ItemsAdder is a separate, paid product of its own authors. It is not included in this repository and is not
-covered by this license.
+ItemsAdder and Nexo are separate, paid products of their own authors. They are not included in this repository
+and are not covered by this license.
 
 ## Credits
 
