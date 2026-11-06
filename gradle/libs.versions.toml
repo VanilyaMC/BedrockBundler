@@ -3,6 +3,8 @@ paper = "1.21.4-R0.1-SNAPSHOT"
 geyser = "2.11.0-SNAPSHOT"
 floodgate = "2.2.5-SNAPSHOT"
 gson = "2.11.0"
+snakeyaml = "2.3"
+nexo = "1.29.1"
 junit = "5.11.4"
 shadow = "9.3.1"
 
@@ -11,6 +13,8 @@ paper-api = { module = "io.papermc.paper:paper-api", version.ref = "paper" }
 geyser-api = { module = "org.geysermc.geyser:api", version.ref = "geyser" }
 floodgate-api = { module = "org.geysermc.floodgate:api", version.ref = "floodgate" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
+nexo = { module = "com.nexomc:nexo", version.ref = "nexo" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }

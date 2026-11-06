@@ -23,7 +23,7 @@ final class BedrockAdderCommand implements TabExecutor {
         switch (sub) {
             case "reload", "rl" -> {
                 boolean force = Arrays.asList(args).contains("-f");
-                sender.sendMessage("[BedrockAdder] Converting ItemsAdder content" + (force ? " (forced)" : "") + "...");
+                sender.sendMessage("[BedrockAdder] Converting " + plugin.source().pluginName() + " content" + (force ? " (forced)" : "") + "...");
                 plugin.convertFromDisk(force, sender);
             }
             case "status" -> status(sender);
@@ -37,7 +37,7 @@ final class BedrockAdderCommand implements TabExecutor {
         ConversionService.Status status = service.status();
         sender.sendMessage("[BedrockAdder] Target: " + service.deployer().describe());
         if (status == null) {
-            sender.sendMessage("[BedrockAdder] No conversion in this session yet. Run /iazip or /bedrockadder reload.");
+            sender.sendMessage("[BedrockAdder] No conversion in this session yet. Run /bedrockadder reload.");
         } else {
             sender.sendMessage(String.format("[BedrockAdder] Last run %s: %d items, %d blocks, %d entity blocks skipped, %d warnings%s",
                     status.time(), status.items(), status.blocks(), status.skippedBlocks(), status.warnings(),

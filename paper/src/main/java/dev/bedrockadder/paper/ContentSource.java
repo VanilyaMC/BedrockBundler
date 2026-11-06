@@ -1,0 +1,43 @@
+package dev.bedrockadder.paper;
+
+import dev.bedrockadder.common.convert.ConversionContext;
+import dev.bedrockadder.common.input.IaBlock;
+import dev.bedrockadder.common.input.IaItem;
+import org.bukkit.entity.ItemDisplay;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * A custom content plugin BedrockAdder converts from (ItemsAdder, Nexo). Implementations live next to the plugin's
+ * API and are only loaded when that plugin is installed, so BedrockAdder runs with either one.
+ */
+public interface ContentSource {
+
+    /** Plugin name, as in its plugin.yml. */
+    String pluginName();
+
+    /** Registers the listeners that start a conversion when the plugin builds its resource pack. */
+    void enable(BedrockAdderPlugin plugin);
+
+    /** Registry snapshot of the custom items. Runs on the global (main) thread. */
+    List<IaItem> items();
+
+    /**
+     * Registry snapshot of the custom blocks that replace a vanilla block state. Runs on the global (main) thread.
+     *
+     * @param skipped receives ids of blocks that are not state-based (entity/furniture blocks)
+     */
+    List<IaBlock> blocks(List<String> skipped);
+
+    /** The generated Java resource pack as read from disk, or null when the plugin has not built one yet. */
+    Map<String, byte[]> packFromDisk() throws java.io.IOException;
+
+    /** Whether this item display is one of the plugin's furniture pieces. Called on the display's own thread. */
+    boolean isFurniture(ItemDisplay display);
+
+    /** Adjusts conversion options to how this plugin renders its content. */
+    default ConversionContext.Options adjust(ConversionContext.Options options) {
+        return options;
+    }
+}

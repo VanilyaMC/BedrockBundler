@@ -87,7 +87,7 @@ final class ConversionService {
                 if (bundle.converterVersion() != Converter.CONVERTER_VERSION) {
                     // Output of an older BedrockAdder may be broken; wait for the reconversion instead.
                     plugin.getLogger().info("The existing Bedrock bundle was made by an older BedrockAdder and is not deployed; "
-                            + "it is regenerated once ItemsAdder has loaded.");
+                            + "it is regenerated once the content plugin has loaded.");
                     return;
                 }
                 deployer.deploy(bundleFolder);
@@ -97,12 +97,11 @@ final class ConversionService {
         });
     }
 
-    /** Must be called on the server thread: the ItemsAdder registry is read here. */
-    void convert(Map<String, byte[]> javaPack, boolean force, CommandSender sender) {
-        IaRegistryReader reader = new IaRegistryReader(plugin.getLogger());
-        List<IaItem> items = reader.items();
+    /** Must be called on the global (main) thread: the content plugin's registry is read here. */
+    void convert(ContentSource source, Map<String, byte[]> javaPack, boolean force, CommandSender sender) {
+        List<IaItem> items = source.items();
         List<String> skippedBlocks = new ArrayList<>();
-        List<IaBlock> blocks = reader.blocks(skippedBlocks);
+        List<IaBlock> blocks = source.blocks(skippedBlocks);
         ConversionInput input = new ConversionInput(javaPack, items, blocks);
         executor.execute(() -> run(input, skippedBlocks, force, sender));
     }
@@ -117,7 +116,7 @@ final class ConversionService {
                 Bundle bundle = existing;
                 status = new Status(Instant.now(), hash, bundle.items().size(), bundle.blocks().size(),
                         skippedBlocks.size(), 0, false);
-                message(sender, "ItemsAdder content is unchanged; Bedrock bundle is up to date.");
+                message(sender, "Content is unchanged; Bedrock bundle is up to date.");
                 return;
             }
 
@@ -155,7 +154,11 @@ final class ConversionService {
     private void message(CommandSender sender, String message) {
         plugin.getLogger().info(message);
         if (sender != null && !(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
-            plugin.getServer().getScheduler().runTask(plugin, () -> sender.sendMessage("[BedrockAdder] " + message));
+            if (sender instanceof org.bukkit.entity.Player player) {
+                player.getScheduler().run(plugin, t -> player.sendMessage("[BedrockAdder] " + message), null);
+            } else {
+                Scheduling.global(plugin, () -> sender.sendMessage("[BedrockAdder] " + message));
+            }
         }
     }
 

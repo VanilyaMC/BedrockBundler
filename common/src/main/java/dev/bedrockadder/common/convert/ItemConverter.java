@@ -177,7 +177,9 @@ public final class ItemConverter {
         JsonArray animate = new JsonArray();
         for (Map.Entry<String, BasePose> pose : POSES.entrySet()) {
             String context = pose.getKey();
-            animations.add(animationPrefix + context, animation(display(model, context), pose.getValue()));
+            JsonObject display = context.equals("furniture") && "none".equals(ctx.options().furnitureDisplay())
+                    ? new JsonObject() : display(model, context);
+            animations.add(animationPrefix + context, animation(display, pose.getValue()));
             animationRefs.addProperty(context, animationPrefix + context);
             JsonObject entry = new JsonObject();
             entry.addProperty(context, CONDITIONS.get(context));

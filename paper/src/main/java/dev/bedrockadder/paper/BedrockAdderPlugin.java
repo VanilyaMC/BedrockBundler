@@ -10,10 +10,10 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
+import dev.bedrockadder.paper.nexo.NexoSource;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.HexFormat;
@@ -25,9 +25,16 @@ public final class BedrockAdderPlugin extends JavaPlugin {
     private Settings settings;
     private ConversionService conversion;
     private FurnitureMirror furniture;
+    private ContentSource source;
 
     @Override
     public void onEnable() {
+        source = detectSource();
+        if (source == null) {
+            getLogger().severe("Neither Nexo nor ItemsAdder is installed (or this build has no hook for it); BedrockAdder is disabled.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         saveDefaultConfig();
         if (getConfig().getString("sync.http.token", "").isEmpty()) {
             byte[] token = new byte[24];
@@ -44,8 +51,8 @@ public final class BedrockAdderPlugin extends JavaPlugin {
             getLogger().log(Level.SEVERE, "Could not set up sync type " + settings.syncType() + "; bundles are only written locally", e);
             deployer = offDeployer();
         }
-        conversion = new ConversionService(this, deployer,
-                new ConversionContext.Options(settings.iconSize(), settings.fonts(), settings.fontCellUnits(), settings.guiOffsetX()),
+        conversion = new ConversionService(this, deployer, source.adjust(
+                new ConversionContext.Options(settings.iconSize(), settings.fonts(), settings.fontCellUnits(), settings.guiOffsetX())),
                 settings.packName());
         conversion.deployExisting();
         getLogger().info("Bedrock bundles go to: " + deployer.describe());
@@ -55,13 +62,14 @@ public final class BedrockAdderPlugin extends JavaPlugin {
             if (bedrock == null) {
                 getLogger().warning("Furniture for Bedrock needs Floodgate or Geyser-Spigot on this server; it is disabled.");
             } else {
-                furniture = new FurnitureMirror(this, bedrock, settings.furnitureYawOffset(), settings.furnitureYOffset());
+                furniture = new FurnitureMirror(this, bedrock, source, settings.furnitureYawOffset(), settings.furnitureYOffset());
                 furniture.start();
-                getLogger().info("Showing ItemsAdder furniture to Bedrock players (detected via " + bedrock.source() + ")");
+                getLogger().info("Showing " + source.pluginName() + " furniture to Bedrock players (detected via " + bedrock.source() + ")");
             }
         }
 
-        getServer().getPluginManager().registerEvents(new ItemsAdderListener(this), this);
+        source.enable(this);
+        getLogger().info("Converting " + source.pluginName() + " content for Bedrock" + (Scheduling.isFolia() ? " (Folia scheduling)" : ""));
         PluginCommand command = getCommand("bedrockadder");
         if (command != null) {
             BedrockAdderCommand executor = new BedrockAdderCommand(this);
@@ -133,23 +141,57 @@ public final class BedrockAdderPlugin extends JavaPlugin {
         };
     }
 
-    /** Converts from ItemsAdder's generated pack on disk (used by the command and as a startup fallback). */
-    void convertFromDisk(boolean force, CommandSender sender) {
-        Plugin itemsAdder = getServer().getPluginManager().getPlugin("ItemsAdder");
-        Path zip = itemsAdder == null ? null : itemsAdder.getDataFolder().toPath().resolve("output").resolve("generated.zip");
-        if (zip == null || !Files.isRegularFile(zip)) {
-            reply(sender, "ItemsAdder has not generated a resource pack yet. Run /iazip.");
-            return;
+    /** Picks the content plugin: {@code source} in the config, or Nexo, then ItemsAdder. */
+    private ContentSource detectSource() {
+        String wanted = getConfig().getString("source", "AUTO").toUpperCase(java.util.Locale.ROOT);
+        boolean nexo = getServer().getPluginManager().getPlugin("Nexo") != null;
+        boolean itemsAdder = getServer().getPluginManager().getPlugin("ItemsAdder") != null;
+        if (nexo && (wanted.equals("NEXO") || (wanted.equals("AUTO")))) {
+            if (itemsAdder) {
+                getLogger().warning("Both Nexo and ItemsAdder are installed; converting Nexo. Set 'source: ITEMSADDER' to switch.");
+            }
+            return new NexoSource();
         }
+        if (itemsAdder && !wanted.equals("NEXO")) {
+            try {
+                // Compiled only when the licensed ItemsAdder jar was present at build time.
+                return (ContentSource) Class.forName("dev.bedrockadder.paper.itemsadder.ItemsAdderSource")
+                        .getDeclaredConstructor().newInstance();
+            } catch (ReflectiveOperationException | LinkageError e) {
+                getLogger().severe("This BedrockAdder build has no ItemsAdder support: " + e);
+            }
+        }
+        return null;
+    }
+
+    /** Converts from the content plugin's generated pack (used by the command, Nexo, and as a startup fallback). */
+    public void convertFromDisk(boolean force, CommandSender sender) {
         Map<String, byte[]> files;
         try {
-            files = JavaPack.readZip(zip);
+            files = source.packFromDisk();
         } catch (IOException | RuntimeException e) {
             // ItemsAdder's zip protection can make the archive unreadable on purpose.
-            reply(sender, "Could not read " + zip + " (" + e.getMessage() + "). Run /iazip so BedrockAdder receives the pack directly.");
+            reply(sender, "Could not read the " + source.pluginName() + " resource pack (" + e.getMessage() + ").");
             return;
         }
-        conversion.convert(files, force, sender);
+        if (files == null) {
+            reply(sender, source.pluginName() + " has not generated a resource pack yet.");
+            return;
+        }
+        convert(files, force, sender);
+    }
+
+    /** Snapshots the registry (global thread) and converts in the background. */
+    public void convert(Map<String, byte[]> files, boolean force, CommandSender sender) {
+        Scheduling.global(this, () -> conversion.convert(source, files, force, sender));
+    }
+
+    public boolean autoConvert() {
+        return settings.autoConvert();
+    }
+
+    ContentSource source() {
+        return source;
     }
 
     private void reply(CommandSender sender, String message) {
