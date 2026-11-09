@@ -1,6 +1,6 @@
-id: bedrockadder
-name: BedrockAdder
-main: dev.bedrockadder.geyser.BedrockAdderExtension
+id: bedrockbundler
+name: BedrockBundler
+main: dev.bedrockbundler.geyser.BedrockBundlerExtension
 api: 2.11.0
 version: '${version}'
-authors: [BedrockAdder]
+authors: [BedrockBundler]

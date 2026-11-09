@@ -14,15 +14,15 @@ dependencies {
 
 tasks.jar {
     manifest {
-        attributes("Main-Class" to "dev.bedrockadder.cli.Main")
+        attributes("Main-Class" to "dev.bedrockbundler.cli.Main")
     }
 }
 
 tasks.shadowJar {
-    archiveBaseName.set("BedrockAdder-cli")
+    archiveBaseName.set("BedrockBundler-cli")
     archiveClassifier.set("")
     manifest {
-        attributes("Main-Class" to "dev.bedrockadder.cli.Main")
+        attributes("Main-Class" to "dev.bedrockbundler.cli.Main")
     }
 }
 

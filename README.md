@@ -1,24 +1,32 @@
-# BedrockAdder
+<p align="center"><img src="docs/logo.png" width="128" height="128" alt="BedrockBundler logo"></p>
+
+# BedrockBundler
 
 > [!WARNING]
-> **BedrockAdder is in beta.** It works on the setups it was tested on, but expect bugs and breaking changes
+> **BedrockBundler is in beta.** It works on the setups it was tested on, but expect bugs and breaking changes
 > between versions. Back up your server before trying it, and please report problems.
 
 Makes [Nexo](https://nexomc.com/) and [ItemsAdder](https://itemsadder.devs.beer/) content visible to Bedrock
 players who join through [Geyser](https://geysermc.org/).
 
 Nexo and ItemsAdder only draw their content with a Java resource pack, so Bedrock players normally see plain paper,
-note blocks and missing furniture. BedrockAdder reads the pack the plugin generates and converts it **on your
+note blocks and missing furniture. BedrockBundler reads the pack the plugin generates and converts it **on your
 server**: there is no external conversion service and no manual pack work.
+
+> [!NOTE]
+> BedrockBundler was called **BedrockAdder** while it only supported ItemsAdder. When you update, remove the old
+> `BedrockAdder-*.jar`. On first start BedrockBundler copies `plugins/BedrockAdder/config.yml`, removes Geyser's old
+> `BedrockAdderExtension.jar` and keeps the extension's `config.properties`; the command is now `/bedrockbundler`
+> (`/bb`) and the permission `bedrockbundler.admin`. Restart twice: once to convert, once for Geyser to load it.
 
 ## How it works
 
-1. The content plugin builds its pack (Nexo: on start and `/nexo reload`; ItemsAdder: `/iazip`). BedrockAdder
+1. The content plugin builds its pack (Nexo: on start and `/nexo reload`; ItemsAdder: `/iazip`). BedrockBundler
    reads the pack and a snapshot of the plugin's item and block registry, and converts them off the main thread.
 2. The result is a *bundle*: a Bedrock resource pack (`.mcpack`) plus custom item and block definitions.
-3. The BedrockAdder **Geyser extension** registers the items, blocks and pack when Geyser starts. On a
+3. The BedrockBundler **Geyser extension** registers the items, blocks and pack when Geyser starts. On a
    Geyser-Spigot server the extension installs itself.
-4. While the server runs, BedrockAdder shows furniture (item displays) to Bedrock players.
+4. While the server runs, BedrockBundler shows furniture (item displays) to Bedrock players.
 
 Geyser only loads custom content when it starts, so **restart after each conversion**.
 
@@ -41,8 +49,8 @@ Geyser only loads custom content when it starts, so **restart after each convers
 - [x] Custom blocks also exported as Geyser JSON block mappings, for Geyser installs that use plain `custom_mappings`
 - [x] Nexo 1.2x-1.30: items, note/string/chorus blocks, furniture (including evolving crops), armor, 3D hats, glyphs
 - [x] Folia and Folia forks (Canvas): region-safe furniture mirrors and scheduling
-- [x] Offline converter (`BedrockAdder-cli.jar`) for a Nexo folder, without a running server
-- [x] Skips unchanged conversions; warnings are written to `plugins/BedrockAdder/warnings.txt`
+- [x] Offline converter (`BedrockBundler-cli.jar`) for a Nexo folder, without a running server
+- [x] Skips unchanged conversions; warnings are written to `plugins/BedrockBundler/warnings.txt`
 
 ### Planned
 
@@ -62,11 +70,11 @@ Geyser only loads custom content when it starts, so **restart after each convers
 
 ## Comparison
 
-How BedrockAdder compares with other ways of getting custom content onto Geyser. The details come from each
+How BedrockBundler compares with other ways of getting custom content onto Geyser. The details come from each
 project's public documentation or source as of October 2026, so they may be out of date. `?` means the
 documentation does not say; `—` means the row does not apply.
 
-| | **BedrockAdder** | **Nexo Scaffolding** | **GeyserMC Rainbow** | **Chest-GUI-Generator** | **ItemsAdder alone** |
+| | **BedrockBundler** | **Nexo Scaffolding** | **GeyserMC Rainbow** | **Chest-GUI-Generator** | **ItemsAdder alone** |
 |---|---|---|---|---|---|
 | Works with | ItemsAdder, Nexo | Nexo | Any server (client mod) | Any Java chest GUI pack | — |
 | How you run it | Server plugin + Geyser extension | Server plugin + optional Geyser extension | Fabric client mod | Browser tool | — |
@@ -101,20 +109,20 @@ Tested on Leaf 1.21.11 with Geyser-Spigot 2.12, Floodgate and ViaVersion, and on
 
 ### Geyser-Spigot on the same server (default)
 
-1. Put `BedrockAdder.jar` in `plugins/` next to ItemsAdder and Geyser-Spigot.
+1. Put `BedrockBundler.jar` in `plugins/` next to ItemsAdder and Geyser-Spigot.
 2. Make sure `enable-custom-content: true` is set in `plugins/Geyser-Spigot/config.yml`.
-3. Start the server. BedrockAdder installs its extension into `plugins/Geyser-Spigot/extensions/`.
+3. Start the server. BedrockBundler installs its extension into `plugins/Geyser-Spigot/extensions/`.
 4. Run `/iazip`, or wait for ItemsAdder to build its pack, then **restart**.
 
 ### Geyser on a proxy or standalone
 
-1. Install BedrockAdder on the backend that runs ItemsAdder. Copy `BedrockAdderExtension.jar` into the
+1. Install BedrockBundler on the backend that runs ItemsAdder. Copy `BedrockBundlerExtension.jar` into the
    `extensions/` folder of the proxy or standalone Geyser.
-2. Pick a sync type in `plugins/BedrockAdder/config.yml`:
+2. Pick a sync type in `plugins/BedrockBundler/config.yml`:
    - `FOLDER`: a folder both machines can reach. On the Geyser side, set `source=FOLDER` and the same `folder`
-     in `extensions/bedrockadder/config.properties`.
+     in `extensions/bedrockbundler/config.properties`.
    - `HTTP`: the plugin serves the bundle on `sync.http.port`. On the Geyser side, set `source=HTTP`,
-     `url=http://<backend>:<port>/bedrockadder/bundle` and `token=<sync.http.token>`.
+     `url=http://<backend>:<port>/bedrockbundler/bundle` and `token=<sync.http.token>`.
 3. Restart Geyser after each conversion.
 
 > [!TIP]
@@ -123,19 +131,19 @@ Tested on Leaf 1.21.11 with Geyser-Spigot 2.12, Floodgate and ViaVersion, and on
 
 ### Nexo
 
-Install BedrockAdder next to Nexo; it is picked automatically (`source: AUTO`). BedrockAdder converts once Nexo has
+Install BedrockBundler next to Nexo; it is picked automatically (`source: AUTO`). BedrockBundler converts once Nexo has
 loaded its items and after every pack build (`/nexo reload`), reading the pack from Nexo's
 `Pack.generation.output_path` (default `plugins/Nexo/pack/pack.zip`). Item models, block states and furniture come from
 Nexo's API, so obfuscated packs and Nexo's own block state encoding work unchanged. Nexo furniture uses
-`display_transform: NONE`, which BedrockAdder follows for the furniture pose.
+`display_transform: NONE`, which BedrockBundler follows for the furniture pose.
 
 ### Offline converter
 
-`cli/build/libs/BedrockAdder-cli-<version>.jar` converts a Nexo folder without a server, for example for a
+`cli/build/libs/BedrockBundler-cli-<version>.jar` converts a Nexo folder without a server, for example for a
 Geyser-Standalone that loads plain mappings:
 
 ```
-java -jar BedrockAdder-cli.jar --nexo plugins/Nexo --out build/bedrock \
+java -jar BedrockBundler-cli.jar --nexo plugins/Nexo --out build/bedrock \
      [--pack plugins/Nexo/pack/pack.zip] [--geyser /path/to/geyser] [--pack-name MyPack] [--prefix mypack]
 ```
 
@@ -146,17 +154,17 @@ glyphs (font providers). `--geyser` writes `packs/<pack-name>.mcpack`, `custom_m
 displays on Bedrock).
 
 Use the JSON mappings (from the CLI or `geyser_mappings.json` / `geyser_block_mappings.json` in the bundle) only on a
-Geyser without the BedrockAdder extension. With both, Geyser registers every item and block twice.
+Geyser without the BedrockBundler extension. With both, Geyser registers every item and block twice.
 
 ## Configuration
 
-`plugins/BedrockAdder/config.yml`:
+`plugins/BedrockBundler/config.yml`:
 
 | Key | Default | Meaning |
 |---|---|---|
 | `source` | `AUTO` | `AUTO` (Nexo if installed, else ItemsAdder), `NEXO` or `ITEMSADDER` |
 | `auto-convert` | `true` | Convert whenever the content plugin builds its pack |
-| `pack-name` | `BedrockAdder` | Name of the Bedrock pack; changing it makes players download it again |
+| `pack-name` | `BedrockBundler` | Name of the Bedrock pack; changing it makes players download it again |
 | `icon-size` | `64` | Size of rendered icons for 3D items |
 | `fonts.enabled` | `true` | Convert font images and GUI backgrounds |
 | `fonts.cell-size` | `32` | Java font pixels per Bedrock glyph cell; raise it if emojis look too big |
@@ -169,10 +177,10 @@ Geyser without the BedrockAdder extension. With both, Geyser registers every ite
 
 | Command | Description |
 |---|---|
-| `/bedrockadder reload [-f]` (`/ba`) | Convert from the content plugin's generated pack; `-f` converts even when nothing changed |
-| `/bedrockadder status` | Last conversion, deploy target, and whether Geyser needs a restart |
+| `/bedrockbundler reload [-f]` (`/bb`) | Convert from the content plugin's generated pack; `-f` converts even when nothing changed |
+| `/bedrockbundler status` | Last conversion, deploy target, and whether Geyser needs a restart |
 
-Permission: `bedrockadder.admin` (op by default).
+Permission: `bedrockbundler.admin` (op by default).
 
 ## Building from source
 
@@ -186,9 +194,9 @@ committed. Without it the plugin builds with Nexo support only (the Nexo API com
 
 This builds two jars:
 
-- `paper/build/libs/BedrockAdder-<version>.jar`: the server plugin, with the Geyser extension inside.
-- `geyser-extension/build/libs/BedrockAdderExtension-<version>.jar`: needed only for proxy or standalone Geyser.
-- `cli/build/libs/BedrockAdder-cli-<version>.jar`: the offline converter.
+- `paper/build/libs/BedrockBundler-<version>.jar`: the server plugin, with the Geyser extension inside.
+- `geyser-extension/build/libs/BedrockBundlerExtension-<version>.jar`: needed only for proxy or standalone Geyser.
+- `cli/build/libs/BedrockBundler-cli-<version>.jar`: the offline converter.
 
 | Module | Contents |
 |---|---|
@@ -199,7 +207,7 @@ This builds two jars:
 
 ## License
 
-BedrockAdder is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only).
+BedrockBundler is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only).
 
 Copyright (C) 2026 Altuğ
 
@@ -208,7 +216,7 @@ General Public License as published by the Free Software Foundation, version 3. 
 that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE. See the [LICENSE](LICENSE) file for details.
 
-If you run a modified version of BedrockAdder on a server that players connect to, the AGPL requires you to
+If you run a modified version of BedrockBundler on a server that players connect to, the AGPL requires you to
 offer those players the source code of your modified version.
 
 ItemsAdder and Nexo are separate, paid products of their own authors. They are not included in this repository

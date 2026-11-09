@@ -1,4 +1,4 @@
-# BedrockAdder: Nexo and ItemsAdder content for Bedrock players on Geyser.
+# BedrockBundler: Nexo and ItemsAdder content for Bedrock players on Geyser.
 
 # Which content plugin to convert: AUTO (Nexo if installed, else ItemsAdder), NEXO or ITEMSADDER.
 source: AUTO
@@ -8,7 +8,7 @@ source: AUTO
 auto-convert: true
 
 # Name of the generated Bedrock resource pack. Changing it makes Bedrock players download it again.
-pack-name: "BedrockAdder"
+pack-name: "BedrockBundler"
 
 # Size in pixels of inventory icons rendered for 3D models (16-256).
 icon-size: 64
@@ -42,7 +42,7 @@ sync:
   #            (set 'source=FOLDER' and the same folder in the extension's config.properties)
   #   HTTP   - serve the bundle; a remote Geyser extension downloads it when Geyser starts
   #            (set 'source=HTTP', 'url' and 'token' in the extension's config.properties)
-  #   OFF    - only write plugins/BedrockAdder/bundle
+  #   OFF    - only write plugins/BedrockBundler/bundle
   type: AUTO
   # FOLDER: path relative to the server folder, or absolute.
   folder: ""

@@ -2,14 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-BedrockAdder is a beta Paper plugin plus Geyser extension that makes Nexo and ItemsAdder content (items, 3D models, blocks, armor, furniture, font images, GUI backgrounds) visible to Bedrock players. It converts locally on the server; there is no hosted converter. Licensed AGPL-3.0-only.
+BedrockBundler is a beta Paper plugin plus Geyser extension that makes Nexo and ItemsAdder content (items, 3D models, blocks, armor, furniture, font images, GUI backgrounds) visible to Bedrock players. It converts locally on the server; there is no hosted converter. Licensed AGPL-3.0-only.
 
 ## Build and test
 
 ```
 ./gradlew build                      # all modules + tests; produces the two jars below
 ./gradlew :common:test               # converter tests (the only module with tests)
-./gradlew :common:test --tests "dev.bedrockadder.common.convert.FontConverterTest"
+./gradlew :common:test --tests "dev.bedrockbundler.common.convert.FontConverterTest"
 ./gradlew :common:test --tests "*ConverterTest.legacyCustomModelDataItem"
 ```
 
@@ -17,8 +17,8 @@ BedrockAdder is a beta Paper plugin plus Geyser extension that makes Nexo and It
 - `cli` is the offline converter for a Nexo folder (`NexoFolder`, `NexoBlockStates`), with its own tests.
 - No Java toolchain is configured: any JDK 21+ builds, `options.release = 21`.
 - Outputs:
-  - `paper/build/libs/BedrockAdder-<version>.jar`, the server plugin. Its `processResources` embeds the extension shadow jar as `BedrockAdderExtension.jar`.
-  - `geyser-extension/build/libs/BedrockAdderExtension-<version>.jar`, with Gson relocated.
+  - `paper/build/libs/BedrockBundler-<version>.jar`, the server plugin. Its `processResources` embeds the extension shadow jar as `BedrockBundlerExtension.jar`.
+  - `geyser-extension/build/libs/BedrockBundlerExtension-<version>.jar`, with Gson relocated.
 - `ConverterTest` also writes the unpacked output to `common/build/test-output/` for manual inspection.
 
 ## Architecture
@@ -29,7 +29,7 @@ Three Gradle modules. Data flows plugin → bundle → extension:
    - A `ContentSource` (`nexo.NexoSource`, `itemsadder.ItemsAdderSource`, the latter loaded by name) snapshots the registry and reads the generated pack. Threads go through `Scheduling` (Paper's region schedulers), so the plugin is Folia/Canvas-safe.
    - `ItemsAdderListener` receives the generated pack from `ItemsAdderPackCompressedEvent`. When ItemsAdder doesn't rebuild an unchanged pack, it falls back to reading `ItemsAdder/output/generated.zip` 5 s after `FIRST_LOAD`.
    - `IaRegistryReader` snapshots the ItemsAdder registry into `IaItem`/`IaBlock` records on the server thread.
-   - `ConversionService` converts on a single background thread and writes a **bundle** to `plugins/BedrockAdder/bundle/`. A `Deployer` then delivers it: `LocalGeyserDeployer` (Geyser-Spigot on the same server; also installs the embedded extension jar), `FolderDeployer` or `HttpDeployer`.
+   - `ConversionService` converts on a single background thread and writes a **bundle** to `plugins/BedrockBundler/bundle/`. A `Deployer` then delivers it: `LocalGeyserDeployer` (Geyser-Spigot on the same server; also installs the embedded extension jar), `FolderDeployer` or `HttpDeployer`.
 2. **`common`** is the converter and has no Bukkit or Geyser dependency.
    - `Converter.convert(ConversionInput, Options, packName)` → `Bundle` (item/block specs) + `.mcpack` + Geyser v2 mappings JSON (`MappingWriter`, export only).
    - `JavaPack` → `ModelResolver` → `ItemConverter` / `BlockConverter` / `ArmorConverter` / `FontConverter` → `BedrockPack`.
@@ -63,6 +63,6 @@ Furniture is runtime, not conversion: `FurnitureMirror` (paper) spawns a non-per
 ## Testing in game
 
 - **Unit tests** cover the converter with fixture packs that mirror real ItemsAdder output (`ItemsAdderPackLayoutTest`). Several bugs only showed up against a real ItemsAdder pack and real Bedrock client, so verify visual changes in game.
-- **Local test server.** `test/` is a git-ignored Leaf test server, started with `start.bat`; `test_ss/` holds Java vs Bedrock comparison screenshots. Don't replace the plugin jar while that server is running: ask the user to stop it, then copy `paper/build/libs/BedrockAdder-*.jar` into `test/plugins/`. Two restarts are needed for converter changes: convert, then Geyser load.
+- **Local test server.** `test/` is a git-ignored Leaf test server, started with `start.bat`; `test_ss/` holds Java vs Bedrock comparison screenshots. Don't replace the plugin jar while that server is running: ask the user to stop it, then copy `paper/build/libs/BedrockBundler-*.jar` into `test/plugins/`. Two restarts are needed for converter changes: convert, then Geyser load.
 - **Nexo test server.** `test-nexo/` (git-ignored) is the same Leaf server with Nexo instead of ItemsAdder, on port 25566. The same jar-swap rule applies.
 - **Reference files.** Vanilla Bedrock UI JSON can be read for reference from the installed client's `data/resource_packs/vanilla/__brarchive/ui.brarchive`, which is an uncompressed archive. Do not copy it into the pack.

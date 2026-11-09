@@ -38,12 +38,12 @@ tasks.processResources {
     val extensionJar = project(":geyser-extension").tasks.named<Jar>("shadowJar")
     dependsOn(extensionJar)
     from(extensionJar.flatMap { it.archiveFile }) {
-        rename { "BedrockAdderExtension.jar" }
+        rename { "BedrockBundlerExtension.jar" }
     }
 }
 
 tasks.shadowJar {
-    archiveBaseName.set("BedrockAdder")
+    archiveBaseName.set("BedrockBundler")
     archiveClassifier.set("")
 }
 
