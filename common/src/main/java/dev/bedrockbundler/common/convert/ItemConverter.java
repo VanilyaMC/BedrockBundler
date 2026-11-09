@@ -38,11 +38,15 @@ public final class ItemConverter {
         POSES.put("thirdperson_off_hand", new BasePose(new float[]{90, 0, 0}, new float[]{0, 13, -3}, 1));
         POSES.put("firstperson_main_hand", new BasePose(new float[]{90, 60, -40}, new float[]{4, 10, 4}, 1.5f));
         // Bedrock's first person off-hand frame is not the mirror of the main hand one. This is the main hand
-        // pose carried over by the frame difference of the vanilla shield attachable (its main and off hand
-        // first person animations, pivot [1, 15.5, 3]), with the model mirrored by a negative x scale like
-        // vanilla does; the Java left hand display is mirrored too (see mirrored()).
-        POSES.put("firstperson_off_hand", new BasePose(new float[]{171.05f, 7.7f, 176.42f},
-                new float[]{-6.75f, 18.47f, 23.37f}, new float[]{-1.5f, 1.5f, 1.5f}));
+        // pose P carried over by the frame difference of the vanilla shield attachable, assuming its off hand
+        // pose shows the mirror image of its main hand one: V_off * M_shield * V_main^-1 * P * M, with V the
+        // first person animations of vanilla_1.20.0 (main [5.3, 26, 0.4] / [91, 65, -43], off [-13.5, -5.8, 5.1]
+        // / [1, 176, -2.5], pivot [1, 15.5, 3]; the base vanilla pack's values are overridden), M_shield the
+        // mirror about the shield's centre x = 1 and M the mirror about our model centre. Bone rotations are
+        // Rz(-z) Ry(y) Rx(-x), as Blockbench reads them. Together with the mirrored Java left hand display
+        // (mirrored()) this draws the screen mirror image of the main hand, as Java does.
+        POSES.put("firstperson_off_hand", new BasePose(new float[]{177.75f, 5.48f, -177.51f},
+                new float[]{-22.28f, 17.08f, 23.12f}, 1.5f));
         POSES.put("head", new BasePose(new float[]{0, 0, 0}, new float[]{0, 19.9f, 0}, 0.625f));
         // Worn by BedrockBundler's furniture stand: the model centre sits half a block above the stand's feet,
         // like an item_display renders the model centred on its position.
@@ -90,16 +94,27 @@ public final class ItemConverter {
             ctx.log().warn("No model found for item " + item.id() + "; it gets a placeholder icon");
         }
 
+        // Armor: the worn part shares the item's one attachable with the model held in a hand.
+        ArmorConverter.Worn worn = item.equipSlot() != null && item.armorAsset() != null
+                ? armor.worn(bedrockId, flat, item.equipSlot(), item.armorAsset()) : null;
+
         boolean handheld = false;
         BufferedImage iconImage;
         if (model != null && model.kind() == JavaModel.Kind.ELEMENTS) {
             iconImage = IconRenderer.render(model, ctx.textures()::load, ctx.options().iconSize());
             ResourceId usingId = ctx.models().usingItemModel(item.itemModel());
             JavaModel using = usingId == null ? null : ctx.models().model(usingId);
-            attachable(bedrockId, flat, model, using, item.material().equals("minecraft:shield"));
+            attachable(bedrockId, flat, model, using, item, worn, Map.of());
         } else if (model != null && model.flat()) {
             iconImage = layered(model);
             handheld = model.kind() == JavaModel.Kind.HANDHELD;
+            if (worn != null && iconImage != null) {
+                // An attachable replaces the flat icon Bedrock draws in a hand, so the sprite is built as a model
+                // the way Java builds item/generated ones.
+                attachable(bedrockId, flat, GeneratedItemModel.of(model, iconImage, GeneratedItemModel.TEXTURE),
+                        null, item, worn, Map.of(GeneratedItemModel.TEXTURE, iconImage));
+                worn = null;
+            }
         } else {
             String texture = model == null ? null : model.primaryTexture();
             iconImage = texture == null ? null : ctx.textures().load(texture);
@@ -112,9 +127,15 @@ public final class ItemConverter {
         String iconPath = "textures/" + ConversionContext.NAMESPACE + "/items/" + flat;
         ctx.bedrockPack().file(iconPath + ".png", Textures.png(iconImage));
         ctx.bedrockPack().itemTexture(icon, iconPath);
+        if (armor.replacesVanillaElytra(bedrockId)) {
+            // Worn, the item is the vanilla elytra on Bedrock, also in the player's own armor slot.
+            ctx.bedrockPack().file(ArmorConverter.VANILLA_ELYTRA_ICON + ".png", Textures.png(iconImage));
+        }
 
-        if (item.equipSlot() != null && item.armorAsset() != null) {
-            armor.attachable(bedrockId, flat, item.equipSlot(), item.armorAsset());
+        if (worn != null && (model == null || model.kind() != JavaModel.Kind.ELEMENTS)) {
+            // No model to hold (missing or empty): the worn part alone.
+            attachable(bedrockId, flat, GeneratedItemModel.of(model, iconImage, GeneratedItemModel.TEXTURE),
+                    null, item, worn, Map.of(GeneratedItemModel.TEXTURE, iconImage));
         }
         java.util.List<String> tags = armor.tags(item);
 
@@ -175,12 +196,19 @@ public final class ItemConverter {
      * @param using the model shown while the item is used (raised shield, charged trident), or null. Only its
      *              display transforms are used: Java's variants share their elements.
      */
-    private void attachable(String bedrockId, String flat, JavaModel model, JavaModel using, boolean shield) {
+    private void attachable(String bedrockId, String flat, JavaModel model, JavaModel using, IaItem item,
+                            ArmorConverter.Worn worn, Map<String, BufferedImage> preloaded) {
+        boolean shield = item.material().equals("minecraft:shield");
+        boolean trident = item.material().equals("minecraft:trident");
+        // A thrown trident is drawn like an item display (FurnitureMirror): Nexo uses the display context of
+        // its trident mechanic, otherwise the furniture one is kept.
+        String thrownDisplay = item.thrownDisplay();
         Map<String, BufferedImage> textures = new LinkedHashMap<>();
         for (JavaModel.Element element : model.elements()) {
             for (JavaModel.Face face : element.faces().values()) {
                 if (face.texture() != null) {
-                    textures.computeIfAbsent(face.texture(), ctx.textures()::load);
+                    textures.computeIfAbsent(face.texture(),
+                            id -> preloaded.containsKey(id) ? preloaded.get(id) : ctx.textures().load(id));
                 }
             }
         }
@@ -199,33 +227,69 @@ public final class ItemConverter {
         for (Map.Entry<String, BasePose> pose : POSES.entrySet()) {
             String context = pose.getKey();
             boolean hand = context.contains("_hand");
-            JsonObject display = context.equals("furniture") && "none".equals(ctx.options().furnitureDisplay())
-                    ? new JsonObject() : display(model, context);
-            animations.add(animationPrefix + context, animation(display, pose.getValue()));
+            JsonObject animation = animation(context.equals("furniture") ? furnitureDisplay(model, trident ? thrownDisplay : null)
+                    : display(model, context), pose.getValue());
+            if (trident && context.equals("furniture")) {
+                // The only stand that wears a trident is the mirror of a thrown one, pitched like the trident.
+                // Nexo turns its display by rotationYXZ(yaw, -pitch, 0) (the arrow's pitch, positive upwards);
+                // between the stand's yaw and the item that is a turn of -pitch about Bedrock's x.
+                JsonArray pitch = new JsonArray();
+                pitch.add("-q.body_x_rotation");
+                pitch.add(0);
+                pitch.add(0);
+                bone(animation, GeometryConverter.ITEM_ROOT).add("rotation", pitch);
+            }
+            animations.add(animationPrefix + context, animation);
             animationRefs.addProperty(context, animationPrefix + context);
             JsonObject entry = new JsonObject();
             entry.addProperty(context, CONDITIONS.get(context) + (using != null && hand ? " && !v.using" : ""));
             animate.add(entry);
             if (using != null && hand) {
                 String usingContext = context + "_using";
-                animations.add(animationPrefix + usingContext, animation(display(using, context), pose.getValue()));
+                JsonObject usingAnimation = animation(display(using, context), pose.getValue());
+                if (trident && context.startsWith("firstperson")) {
+                    // Java's first person trident charging (ItemInHandRenderer, TRIDENT use animation, fully
+                    // charged): translate(-0.5i, 0.7, 0.1) Rx(-55) Ry(35.3i) Rz(-9.785i) translate(0, 0, 0.2)
+                    // Ry(-45i) between the arm and the display transform, i = 1 right / -1 left, in Bedrock axes.
+                    // Its z stretch by 1.2 is left out.
+                    float i = context.contains("main") ? 1 : -1;
+                    JsonObject use = new JsonObject();
+                    use.add("position", Json.array(6.15f * i, 13.34f, 3.1f));
+                    use.add("rotation", Json.array(61.77f, 11.45f * i, 4.33f * i));
+                    usingAnimation.getAsJsonObject("bones").add(GeometryConverter.ITEM_ROOT + GeometryConverter.USE, use);
+                }
+                animations.add(animationPrefix + usingContext, usingAnimation);
                 animationRefs.addProperty(usingContext, animationPrefix + usingContext);
                 JsonObject usingEntry = new JsonObject();
                 usingEntry.addProperty(usingContext, CONDITIONS.get(context) + " && v.using");
                 animate.add(usingEntry);
             }
         }
+        // Bedrock moves the arm for these poses only with the vanilla items (animation.player.shield_block_*,
+        // vanilla trident charging), and those poses also turn the vanilla models, so they do not fit Java models.
+        // The Java arm pose (HumanoidModel) is played on the item's own arm bones in third person instead, minus
+        // Bedrock's holding pose that already turns the arm by x -18. The item keeps its hand display, as on Java.
+        String armPose = null;
+        float[] rightArm = null;
+        float[] leftArm = null;
         if (using != null && shield) {
-            // Bedrock raises the arm for blocking only with the vanilla shield (animation.player.shield_block_*);
-            // the same arm and hand motion is played on the item's own bones in third person.
-            animations.add(animationPrefix + "block_main_hand", blockAnimation(GeometryConverter.ARM_RIGHT,
-                    new float[]{-20, -30, -25}, new float[]{-1, -3, 0}, new float[]{0, -60, -45}));
-            animations.add(animationPrefix + "block_off_hand", blockAnimation(GeometryConverter.ARM_LEFT,
-                    new float[]{-20, 20, 20}, new float[]{1, -3, 0}, new float[]{0, 70, 65}));
+            // BLOCK: x -54, y -30 (right) / +30 (left); Rx(-18)^-1 Ry(+-30) Rx(-54).
+            armPose = "block_";
+            rightArm = new float[]{-33.43f, -28.39f, -10.12f};
+            leftArm = new float[]{-33.43f, 28.39f, 10.12f};
+        } else if (using != null && trident) {
+            // THROW_TRIDENT: the arm straight up, x -180.
+            armPose = "throw_";
+            rightArm = new float[]{-162, 0, 0};
+            leftArm = new float[]{-162, 0, 0};
+        }
+        if (armPose != null) {
+            animations.add(animationPrefix + armPose + "main_hand", armAnimation(GeometryConverter.ARM_RIGHT, rightArm));
+            animations.add(animationPrefix + armPose + "off_hand", armAnimation(GeometryConverter.ARM_LEFT, leftArm));
             for (String hand : new String[]{"main_hand", "off_hand"}) {
-                animationRefs.addProperty("block_" + hand, animationPrefix + "block_" + hand);
+                animationRefs.addProperty(armPose + hand, animationPrefix + armPose + hand);
                 JsonObject entry = new JsonObject();
-                entry.addProperty("block_" + hand, "v." + hand + " && !c.is_first_person && v.using");
+                entry.addProperty(armPose + hand, "v." + hand + " && !c.is_first_person && v.using");
                 animate.add(entry);
             }
         }
@@ -250,11 +314,27 @@ public final class ItemConverter {
             // Geyser sets these on the owner while the Java player uses the item (blocking also for shields).
             preAnimation.add("v.using = q.is_using_item || q.blocking;");
         }
+        JsonArray renderControllers = new JsonArray();
+        if (worn == null) {
+            renderControllers.add("controller.render.item_default");
+        } else {
+            // Held: the item model. Anywhere else (armor slots, an animal's body, a stand): the armor.
+            preAnimation.add("v.held = c.item_slot == 'main_hand' || c.item_slot == 'off_hand';");
+            worn.materials().entrySet().forEach(e -> description.getAsJsonObject("materials").add(e.getKey(), e.getValue()));
+            worn.textures().entrySet().forEach(e -> description.getAsJsonObject("textures").add(e.getKey(), e.getValue()));
+            worn.geometry().entrySet().forEach(e -> description.getAsJsonObject("geometry").add(e.getKey(), e.getValue()));
+            worn.animations().entrySet().forEach(e -> animationRefs.add(e.getKey(), e.getValue()));
+            preAnimation.addAll(worn.preAnimation());
+            animate.addAll(worn.animate());
+            if (worn.parentSetup() != null) {
+                scripts.addProperty("parent_setup", worn.parentSetup());
+            }
+            renderControllers.add(stringMap("controller.render.item_default", "v.held"));
+            renderControllers.add(stringMap(worn.controller(), "!v.held"));
+        }
         scripts.add("pre_animation", preAnimation);
         scripts.add("animate", animate);
         description.add("scripts", scripts);
-        JsonArray renderControllers = new JsonArray();
-        renderControllers.add("controller.render.item_default");
         description.add("render_controllers", renderControllers);
 
         JsonObject attachable = new JsonObject();
@@ -288,15 +368,27 @@ public final class ItemConverter {
         return copy;
     }
 
-    private static JsonObject blockAnimation(String armBone, float[] armRotation, float[] handPosition, float[] handRotation) {
+    /**
+     * Display of the furniture pose: the content plugin's display context of a thrown trident when known
+     * ({@code none}: no transform), else the {@code fixed} one item displays use, unless turned off.
+     */
+    private JsonObject furnitureDisplay(JavaModel model, String thrownDisplay) {
+        if (thrownDisplay != null) {
+            JsonObject display = model.display().get(thrownDisplay);
+            return display == null ? new JsonObject() : display;
+        }
+        return "none".equals(ctx.options().furnitureDisplay()) ? new JsonObject() : display(model, "furniture");
+    }
+
+    private static JsonObject bone(JsonObject animation, String name) {
+        return animation.getAsJsonObject("bones").getAsJsonObject(name);
+    }
+
+    private static JsonObject armAnimation(String armBone, float[] armRotation) {
         JsonObject bones = new JsonObject();
         JsonObject arm = new JsonObject();
         arm.add("rotation", Json.array(armRotation));
         bones.add(GeometryConverter.ITEM_ROOT + armBone, arm);
-        JsonObject hand = new JsonObject();
-        hand.add("position", Json.array(handPosition));
-        hand.add("rotation", Json.array(handRotation));
-        bones.add(GeometryConverter.ITEM_ROOT + GeometryConverter.HAND, hand);
         JsonObject animation = new JsonObject();
         animation.addProperty("loop", true);
         animation.add("bones", bones);

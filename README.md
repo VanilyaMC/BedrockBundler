@@ -38,7 +38,10 @@ Geyser only loads custom content when it starts, so **restart after each convers
 - [x] 3D items: Bedrock geometry and attachables (first and third person, swing animation), rendered inventory icons
 - [x] Items using `item_model` (1.21.4+) and legacy CustomModelData
 - [x] Custom blocks on note block, mushroom, chorus and tripwire states: full cubes and custom geometry, light, hardness
-- [x] Armor from 1.21.4+ `equipment` assets
+- [x] Armor from 1.21.4+ `equipment` assets: player armor, elytra, and armor held in the hand
+- [x] Animal armor: horse armor, wolf armor and llama carpets
+- [x] Shields with a blocking model: first and third person poses that follow Java's
+- [x] Tridents: Java's charge pose in first and third person; thrown custom tridents keep their flight angle
 - [x] Food, max stack size, durability and equippable item properties
 - [x] Furniture (`item_display`): position, rotation and scale follow the Java entity
 - [x] Font images (emojis, chat icons), sized by their Java `height`/`ascent`
@@ -67,6 +70,15 @@ Geyser only loads custom content when it starts, so **restart after each convers
 
 - Negative font offsets, so HUDs that are aligned with them do not look like on Java. Bedrock text cannot move backwards.
 - Glyphs taller than a text line inside chat or titles. Bedrock draws every glyph at text size; GUI backgrounds are handled separately.
+- More than one look for worn elytras. Bedrock players can only glide with the vanilla elytra, so Geyser sends that
+  in place of a custom one. BedrockBundler gives the vanilla elytra the look of the first custom elytra; any others
+  look the same while worn.
+
+### Good to know
+
+- Bedrock only draws armor on horses and llamas whose client entity allows it. When the pack contains armor for
+  them, it replaces the vanilla horse, llama and trader llama client entities with copies that do (taken from
+  Bedrock 1.26). Much older Bedrock clients may draw these animals wrongly.
 
 ## Comparison
 
@@ -135,7 +147,8 @@ Install BedrockBundler next to Nexo; it is picked automatically (`source: AUTO`)
 loaded its items and after every pack build (`/nexo reload`), reading the pack from Nexo's
 `Pack.generation.output_path` (default `plugins/Nexo/pack/pack.zip`). Item models, block states and furniture come from
 Nexo's API, so obfuscated packs and Nexo's own block state encoding work unchanged. Nexo furniture uses
-`display_transform: NONE`, which BedrockBundler follows for the furniture pose.
+`display_transform: NONE`, which BedrockBundler follows for the furniture pose. Thrown custom tridents use the
+`display_transform` of their trident mechanic.
 
 ### Offline converter
 
@@ -192,7 +205,7 @@ committed. Without it the plugin builds with Nexo support only (the Nexo API com
 ./gradlew build
 ```
 
-This builds two jars:
+This builds three jars:
 
 - `paper/build/libs/BedrockBundler-<version>.jar`: the server plugin, with the Geyser extension inside.
 - `geyser-extension/build/libs/BedrockBundlerExtension-<version>.jar`: needed only for proxy or standalone Geyser.

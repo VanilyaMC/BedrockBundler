@@ -225,7 +225,13 @@ public final class NexoFolder {
                 0,
                 food,
                 section(mechanics, "custom_block") != null,
-                section(mechanics, "furniture") != null);
+                section(mechanics, "furniture") != null,
+                thrownDisplay(section(mechanics, "trident")));
+    }
+
+    /** Java display context of a thrown custom trident ({@code Mechanics.trident.display_transform}, default NONE). */
+    private static String thrownDisplay(Map<String, Object> trident) {
+        return trident == null ? null : string(trident, "display_transform", "NONE").toLowerCase(Locale.ROOT);
     }
 
     private IaBlock block(String id, Map<String, Object> config, Map<String, Object> block, Map<String, byte[]> pack,

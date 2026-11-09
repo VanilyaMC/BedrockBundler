@@ -1,5 +1,6 @@
 package dev.bedrockbundler.common.convert;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.bedrockbundler.common.Json;
 import dev.bedrockbundler.common.bedrock.Textures;
@@ -37,6 +38,7 @@ class EquipmentConverterTest {
         texture.setRGB(1, 1, 0xFF00FF00);
         pack.put("assets/nexo/textures/icon.png", Textures.png(texture));
         pack.put("assets/nexo/textures/entity/equipment/wings/wings.png", Textures.png(texture));
+        pack.put("assets/nexo/textures/entity/equipment/horse_body/horse.png", Textures.png(new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB)));
         json(pack, "assets/nexo/models/icon.json", "{\"parent\": \"item/generated\", \"textures\": {\"layer0\": \"nexo:icon\"}}");
         json(pack, "assets/nexo/items/next_page_icon.json", "{\"model\": {\"type\": \"empty\"}}");
         json(pack, "assets/nexo/items/elytra.json", "{\"model\": {\"type\": \"model\", \"model\": \"nexo:icon\"}}");
@@ -58,9 +60,32 @@ class EquipmentConverterTest {
 
         JsonObject elytra = Json.parse(mcpack.get("attachables/bedrockbundler/nexo_elytra.json")).getAsJsonObject()
                 .getAsJsonObject("minecraft:attachable").getAsJsonObject("description");
-        assertEquals("geometry.elytra", elytra.getAsJsonObject("geometry").get("default").getAsString());
-        assertEquals("controller.render.armor.player", elytra.getAsJsonArray("render_controllers").get(0).getAsString());
+        assertEquals("geometry.elytra", elytra.getAsJsonObject("geometry").get("armor").getAsString());
+        assertTrue(elytra.getAsJsonObject("geometry").get("default").getAsString().startsWith("geometry.bedrockbundler."),
+                "the flat icon is a model to hold");
+        JsonArray controllers = elytra.getAsJsonArray("render_controllers");
+        assertEquals("v.held", controllers.get(0).getAsJsonObject().get("controller.render.item_default").getAsString());
+        assertEquals("!v.held", controllers.get(1).getAsJsonObject().get(ArmorConverter.ARMOR_CONTROLLER).getAsString());
         assertTrue(mcpack.containsKey("textures/bedrockbundler/armor/nexo_elytra.png"));
+        // Worn, Geyser shows the vanilla elytra, which takes the custom look.
+        assertTrue(mcpack.containsKey("textures/models/armor/elytra.png"));
+        assertTrue(mcpack.containsKey("textures/items/elytra.png"));
+
+        JsonObject horseArmor = Json.parse(mcpack.get("attachables/bedrockbundler/nexo_horse.json")).getAsJsonObject()
+                .getAsJsonObject("minecraft:attachable").getAsJsonObject("description");
+        assertEquals("geometry.bedrockbundler.horse_armor", horseArmor.getAsJsonObject("geometry").get("horse").getAsString());
+        // An inflated copy of the horse without saddle, bags and reins.
+        String horseGeometry = new String(mcpack.get("models/entity/bedrockbundler/horse_body.geo.json"), StandardCharsets.UTF_8);
+        assertTrue(horseGeometry.contains("\"geometry.bedrockbundler.horse_armor\""));
+        assertTrue(horseGeometry.contains("\"inflate\": " + ArmorConverter.ARMOR_INFLATE));
+        assertFalse(horseGeometry.contains("\"Saddle\"") || horseGeometry.contains("\"BitL\""));
+        // Vanilla horses draw no attachables; the pack's copy of the horse turns them on.
+        JsonObject horseEntity = Json.parse(mcpack.get("entity/horse.entity.json")).getAsJsonObject()
+                .getAsJsonObject("minecraft:client_entity").getAsJsonObject("description");
+        assertTrue(horseEntity.get("enable_attachables").getAsBoolean());
+        assertTrue(horseEntity.getAsJsonObject("scripts").getAsJsonArray("pre_animation").toString()
+                .contains("'bedrockbundler:nexo_horse'"));
+        assertFalse(mcpack.containsKey("entity/llama.entity.json"), "only animals that wear converted armor");
 
         ItemSpec horse = result.bundle().items().stream().filter(i -> i.bedrockId().endsWith("nexo_horse")).findFirst().orElseThrow();
         assertEquals("body", horse.equipSlot());

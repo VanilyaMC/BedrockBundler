@@ -17,6 +17,8 @@ package dev.bedrockbundler.common.input;
  * @param food             food properties, or null
  * @param block            true when the item places an ItemsAdder custom block
  * @param furniture        true when the item places an ItemsAdder furniture
+ * @param thrownDisplay    Java display context ({@code head}, {@code fixed}, {@code none}, ...) a thrown custom
+ *                         trident is drawn with (Nexo's {@code Mechanics.trident.display_transform}), or null
  */
 public record IaItem(
         String id,
@@ -31,8 +33,21 @@ public record IaItem(
         int protection,
         Food food,
         boolean block,
-        boolean furniture
+        boolean furniture,
+        String thrownDisplay
 ) {
+
+    public IaItem(String id, String material, String itemModel, Integer customModelData, String displayName,
+                  Integer maxStackSize, Integer maxDamage, String equipSlot, String armorAsset, int protection,
+                  Food food, boolean block, boolean furniture) {
+        this(id, material, itemModel, customModelData, displayName, maxStackSize, maxDamage, equipSlot, armorAsset,
+                protection, food, block, furniture, null);
+    }
+
+    public IaItem withThrownDisplay(String thrownDisplay) {
+        return new IaItem(id, material, itemModel, customModelData, displayName, maxStackSize, maxDamage, equipSlot,
+                armorAsset, protection, food, block, furniture, thrownDisplay);
+    }
 
     public record Food(int nutrition, float saturation, boolean canAlwaysEat) {
     }

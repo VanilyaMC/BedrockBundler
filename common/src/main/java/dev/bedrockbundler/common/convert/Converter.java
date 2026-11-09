@@ -23,7 +23,7 @@ import java.util.Set;
 public final class Converter {
 
     /** Bump whenever converter output changes, so servers regenerate bundles made by older versions. */
-    public static final int CONVERTER_VERSION = 16;
+    public static final int CONVERTER_VERSION = 24;
 
     public record Result(Bundle bundle, byte[] mcpack, byte[] mappings, byte[] blockMappings, List<String> warnings) {
     }

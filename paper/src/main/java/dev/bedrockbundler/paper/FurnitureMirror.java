@@ -21,7 +21,6 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Transformation;
-import org.bukkit.util.Vector;
 import org.joml.Vector3f;
 
 import java.util.Map;
@@ -214,27 +213,25 @@ final class FurnitureMirror implements Listener {
 
     /**
      * Thrown custom tridents. The content plugin draws them with its own (packet) item display, which Bedrock
-     * cannot show, so a stand wearing the trident follows it every tick. The stand cannot tilt: the model keeps
-     * its furniture pose and only turns towards the flight direction.
+     * cannot show, so a stand wearing the trident follows it every tick. Nexo turns that display by the trident's
+     * yaw and pitch (arrow angles: yaw = atan2(vx, vz), pitch positive upwards). The stand faces the same way
+     * (an entity yaw is the negated arrow yaw) and carries the trident's pitch, which the item's attachable reads
+     * ({@code q.body_x_rotation}) to tilt the model; Bedrock does not tilt the stand itself.
      */
     private void trackTrident(Trident trident) {
         UUID id = trident.getUniqueId();
         if (!running || tasks.containsKey(id) || !source.isCustomItem(trident.getItemStack())) {
             return;
         }
-        float[] yaw = {trident.getLocation().getYaw()};
         ScheduledTask task = trident.getScheduler().runAtFixedRate(plugin, t -> {
             if (!trident.isValid()) {
                 untrack(id);
                 return;
             }
-            Vector velocity = trident.getVelocity();
-            if (velocity.lengthSquared() > 1.0E-4) {
-                yaw[0] = (float) Math.toDegrees(Math.atan2(-velocity.getX(), velocity.getZ())) + yawOffset;
-            }
-            Location target = trident.getLocation().add(0, yOffset - 0.5, 0);
-            target.setYaw(yaw[0]);
-            target.setPitch(0);
+            Location location = trident.getLocation();
+            Location target = location.clone().add(0, yOffset - 0.5, 0);
+            target.setYaw(-location.getYaw() + yawOffset);
+            target.setPitch(location.getPitch());
             ArmorStand mirror = mirrors.get(id);
             if (mirror == null || !mirror.isValid()) {
                 try {
@@ -246,7 +243,8 @@ final class FurnitureMirror implements Listener {
                 mirror.getEquipment().setHelmet(trident.getItemStack());
                 mirrors.put(id, mirror);
             } else if (mirror.getLocation().distanceSquared(target) > 1.0E-6
-                    || Math.abs(mirror.getLocation().getYaw() - target.getYaw()) > 0.01f) {
+                    || Math.abs(mirror.getLocation().getYaw() - target.getYaw()) > 0.01f
+                    || Math.abs(mirror.getLocation().getPitch() - target.getPitch()) > 0.01f) {
                 mirror.teleportAsync(target);
             }
             showToBedrock(mirror);

@@ -9,6 +9,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -20,6 +21,11 @@ public final class BedrockPack {
 
     /** Lowest Bedrock version whose custom item/block features the generated pack relies on. */
     private static final int[] MIN_ENGINE_VERSION = {1, 21, 0};
+
+    /** Path length the Bedrock client no longer loads (see {@link #shortPath}). */
+    static final int MAX_PATH = 80;
+    private static final String[] DEFINITION_FOLDERS = {
+            "attachables", "animations", "animation_controllers", "render_controllers", "models/entity", "models/blocks"};
 
     private final Map<String, byte[]> files = new TreeMap<>();
     private final JsonObject itemTextures = new JsonObject();
@@ -86,7 +92,8 @@ public final class BedrockPack {
         modules.add(module);
         manifest.add("modules", modules);
 
-        Map<String, byte[]> out = new TreeMap<>(files);
+        Map<String, byte[]> out = new TreeMap<>();
+        files.forEach((path, bytes) -> out.put(shortPath(path), bytes));
         out.put("manifest.json", Json.bytes(manifest));
         // The BedrockBundler logo, shown next to the pack in the Bedrock pack list.
         try (java.io.InputStream icon = BedrockPack.class.getResourceAsStream("/pack_icon.png")) {
@@ -107,6 +114,28 @@ public final class BedrockPack {
         out.put("texts/languages.json", Json.bytes(languages));
 
         return zip(out);
+    }
+
+    /**
+     * The Bedrock client skips pack files whose path has 80 or more characters (an 81 character render controller
+     * was never loaded, one of 80 was). Definition files are found by the identifier inside them, not by their
+     * path, so long ones are renamed to a hash. Textures are referenced by path and keep it.
+     */
+    static String shortPath(String path) {
+        if (path.length() < MAX_PATH) {
+            return path;
+        }
+        for (String folder : DEFINITION_FOLDERS) {
+            if (path.startsWith(folder + "/") && path.endsWith(".json")) {
+                try {
+                    byte[] digest = java.security.MessageDigest.getInstance("SHA-1").digest(path.getBytes(StandardCharsets.UTF_8));
+                    return folder + "/" + HexFormat.of().formatHex(digest, 0, 10) + ".json";
+                } catch (java.security.NoSuchAlgorithmException e) {
+                    throw new IllegalStateException(e);
+                }
+            }
+        }
+        return path;
     }
 
     private static JsonObject atlas(String packName, String atlasName, JsonObject data) {

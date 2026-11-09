@@ -39,6 +39,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
@@ -77,12 +78,36 @@ public final class NexoSource implements ContentSource {
                 }
                 ItemStack stack = builder.build();
                 items.add(ItemSnapshots.item("nexo:" + id, stack, displayName(builder, stack),
-                        NexoBlocks.isCustomBlock(id), NexoFurniture.isFurniture(id)));
+                        NexoBlocks.isCustomBlock(id), NexoFurniture.isFurniture(id)).withThrownDisplay(thrownDisplay(id)));
             } catch (RuntimeException | LinkageError e) {
                 plugin.getLogger().log(Level.WARNING, "Could not read Nexo item " + id, e);
             }
         }
         return items;
+    }
+
+    /**
+     * Java display context Nexo draws a thrown custom trident with ({@code TridentMechanic.getTransform()}), or
+     * null when the item has no trident mechanic. Read reflectively: the mechanic is not in every Nexo release.
+     */
+    private String thrownDisplay(String id) {
+        try {
+            Class<?> managerClass = Class.forName("com.nexomc.nexo.mechanics.MechanicsManager");
+            Object manager = managerClass.getField("INSTANCE").get(null);
+            Object factory = managerClass.getMethod("getMechanicFactory", String.class).invoke(manager, "trident");
+            if (factory == null) {
+                return null;
+            }
+            Object mechanic = factory.getClass().getMethod("getMechanic", String.class).invoke(factory, id);
+            if (mechanic == null) {
+                return null;
+            }
+            Object transform = mechanic.getClass().getMethod("getTransform").invoke(mechanic);
+            return transform == null ? null : transform.toString().toLowerCase(Locale.ROOT);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            plugin.getLogger().log(Level.FINE, "Could not read the trident mechanic of " + id, e);
+            return null;
+        }
     }
 
     private static String displayName(ItemBuilder builder, ItemStack stack) {

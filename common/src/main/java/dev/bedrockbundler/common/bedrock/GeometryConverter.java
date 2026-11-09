@@ -19,11 +19,12 @@ public final class GeometryConverter {
     /** Root bone of item geometry; display transforms animate this bone and its axis children. */
     public static final String ITEM_ROOT = "bedrockbundler";
 
-    /** Bones above the root: binding, right and left arm motion, hand motion (see {@link #item}). */
+    /** Bones above the root: binding, right and left arm motion (see {@link #item}). */
     public static final String HOLD = "_hold";
     public static final String ARM_RIGHT = "_arm_r";
     public static final String ARM_LEFT = "_arm_l";
-    public static final String HAND = "_hand";
+    /** Bone between the root and the display transform bones. */
+    public static final String USE = "_use";
 
     /** Molang binding of the item's top bone to the holder's slot bone. */
     static final String ITEM_BINDING = "c.item_slot == 'head' ? 'head' : q.item_slot_to_bone_name(c.item_slot)";
@@ -51,15 +52,16 @@ public final class GeometryConverter {
         // model is drawn at the player's origin: not in the hand and not following the swing animation.
         hold.addProperty("binding", ITEM_BINDING);
         bones.add(hold);
-        // The holder's arm and hand motion for poses Bedrock only plays for vanilla items (shield blocking).
-        // The hand pivot is the grip: where the third person hand pose puts the Java model centre (ItemConverter,
-        // pivot [0, 8, 0] moved by [0, 13, -3] and turned 90 degrees). The shoulders sit [+-1, 7, -1] from the hand,
-        // as rightArm/rightItem and leftArm/leftItem in the player geometry.
+        // The holder's arm motion for poses Bedrock only plays for vanilla items (shield blocking). The grip is
+        // where the third person hand pose puts the Java model centre (ItemConverter, pivot [0, 8, 0] moved by
+        // [0, 13, -3]); the shoulders sit [+-1, 7, -1] from it, as rightArm/rightItem and leftArm/leftItem in the
+        // player geometry.
         bones.add(bone(ITEM_ROOT + ARM_RIGHT, ITEM_ROOT + HOLD, null, 1, 28, -4));
         bones.add(bone(ITEM_ROOT + ARM_LEFT, ITEM_ROOT + ARM_RIGHT, null, -1, 28, -4));
-        bones.add(bone(ITEM_ROOT + HAND, ITEM_ROOT + ARM_LEFT, null, 0, 21, -3));
-        bones.add(bone(ITEM_ROOT, ITEM_ROOT + HAND, null));
-        bones.add(bone(ITEM_ROOT + "_x", ITEM_ROOT, null));
+        bones.add(bone(ITEM_ROOT, ITEM_ROOT + ARM_LEFT, null));
+        // Motion Java adds between the hand frame and the display transform (first person trident charging).
+        bones.add(bone(ITEM_ROOT + USE, ITEM_ROOT, null));
+        bones.add(bone(ITEM_ROOT + "_x", ITEM_ROOT + USE, null));
         bones.add(bone(ITEM_ROOT + "_y", ITEM_ROOT + "_x", null));
         bones.add(bone(ITEM_ROOT + "_z", ITEM_ROOT + "_y", cubes));
         return geometryFile(identifier, atlas.width(), atlas.height(), bones);
