@@ -1,17 +1,17 @@
-name: BedrockAdder
+name: BedrockBundler
 version: '${version}'
-main: dev.bedrockadder.paper.BedrockAdderPlugin
+main: dev.bedrockbundler.paper.BedrockBundlerPlugin
 api-version: '1.21.4'
-description: Makes ItemsAdder content visible to Bedrock players on Geyser.
-depend: [ItemsAdder]
-softdepend: [Geyser-Spigot, floodgate]
+description: Makes Nexo and ItemsAdder content visible to Bedrock players on Geyser.
+folia-supported: true
+softdepend: [Nexo, ItemsAdder, Geyser-Spigot, floodgate]
 commands:
-  bedrockadder:
-    description: Convert ItemsAdder content for Bedrock and show status.
+  bedrockbundler:
+    description: Convert custom content for Bedrock and show status.
     usage: /<command> <reload [-f]|status>
-    aliases: [ba]
-    permission: bedrockadder.admin
+    aliases: [bb]
+    permission: bedrockbundler.admin
 permissions:
-  bedrockadder.admin:
-    description: Use /bedrockadder.
+  bedrockbundler.admin:
+    description: Use /bedrockbundler.
     default: op

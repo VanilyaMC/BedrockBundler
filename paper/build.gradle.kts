@@ -2,14 +2,31 @@ plugins {
     alias(libs.plugins.shadow)
 }
 
+repositories {
+    maven("https://repo.nexomc.com/releases")
+}
+
+// ItemsAdder is a paid plugin and is not on any public repository. Its hook lives in src/itemsadder/java and is
+// only compiled when your licensed jar is at libs/ItemsAdder-<version>.jar (git-ignored). Without it the plugin
+// still builds and supports Nexo; the ItemsAdder hook is then simply absent.
+val itemsAdderJars = fileTree(rootProject.file("libs")) { include("ItemsAdder*.jar") }
+val withItemsAdder = !itemsAdderJars.isEmpty
+
+sourceSets {
+    main {
+        if (withItemsAdder) {
+            java.srcDir("src/itemsadder/java")
+        }
+    }
+}
+
 dependencies {
     implementation(project(":common"))
     compileOnly(libs.paper.api)
     compileOnly(libs.floodgate.api)
     compileOnly(libs.geyser.api)
-    // ItemsAdder is a paid plugin and is not on any public repository.
-    // Put your licensed jar at libs/ItemsAdder-<version>.jar (it is git-ignored).
-    compileOnly(fileTree(rootProject.file("libs")) { include("ItemsAdder*.jar") })
+    compileOnly(libs.nexo) { isTransitive = false }
+    compileOnly(itemsAdderJars)
 }
 
 tasks.processResources {
@@ -21,12 +38,12 @@ tasks.processResources {
     val extensionJar = project(":geyser-extension").tasks.named<Jar>("shadowJar")
     dependsOn(extensionJar)
     from(extensionJar.flatMap { it.archiveFile }) {
-        rename { "BedrockAdderExtension.jar" }
+        rename { "BedrockBundlerExtension.jar" }
     }
 }
 
 tasks.shadowJar {
-    archiveBaseName.set("BedrockAdder")
+    archiveBaseName.set("BedrockBundler")
     archiveClassifier.set("")
 }
 

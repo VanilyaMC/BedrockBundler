@@ -1,12 +1,12 @@
 // The root project builds nothing itself; applying `java` here would produce an empty
-// build/libs/BedrockAdder-<version>.jar that is easy to mistake for the plugin.
+// build/libs/BedrockBundler-<version>.jar that is easy to mistake for the plugin.
 plugins {
     alias(libs.plugins.shadow) apply false
 }
 
 allprojects {
-    group = "dev.bedrockadder"
-    version = "0.1.0-SNAPSHOT"
+    group = "dev.bedrockbundler"
+    version = "0.2.0-SNAPSHOT"
 }
 
 subprojects {

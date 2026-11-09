@@ -15,9 +15,9 @@ tasks.processResources {
 }
 
 tasks.shadowJar {
-    archiveBaseName.set("BedrockAdderExtension")
+    archiveBaseName.set("BedrockBundlerExtension")
     archiveClassifier.set("")
-    relocate("com.google.gson", "dev.bedrockadder.libs.gson")
+    relocate("com.google.gson", "dev.bedrockbundler.libs.gson")
 }
 
 tasks.build {
