@@ -11,8 +11,10 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -24,13 +26,16 @@ import java.util.TreeMap;
  * sits inside its cell. One cell stands for {@link ConversionContext.Options#fontCellUnits()} Java font pixels:
  * a glyph is scaled by its Java {@code height} and placed by its {@code ascent}, which keeps relative sizes.
  *
- * <p>Offsets (ItemsAdder's shift characters) only move the following text. Positive offsets become invisible
- * glyphs of the same width; negative offsets have no Bedrock equivalent and are skipped.
+ * <p>Offsets (shift characters) only move the following text. Positive offsets become invisible glyphs of the
+ * same width; negative offsets have no Bedrock equivalent and become invisible glyphs without width.
+ *
+ * <p>Bedrock has a single font, so every font of the pack is read: {@code minecraft:default} first (it wins a
+ * conflict), with the fonts it pulls in through {@code reference} providers, then the remaining fonts of other
+ * namespaces (Nexo puts its glyphs in {@code nexo:default}).
  */
 final class FontConverter {
 
-    /** Fonts whose glyphs show up in plain text (chat, item names, titles). */
-    private static final List<String> FONTS = List.of("assets/minecraft/font/default.json");
+    private static final String DEFAULT_FONT = "minecraft:default";
     private static final int MAX_CELL = 64;
     /** Glyphs drawn this far away only exist for their width: ItemsAdder's offset characters. */
     private static final int OFFSET_ASCENT = -100;
@@ -52,6 +57,8 @@ final class FontConverter {
 
     private final ConversionContext ctx;
     private final List<Glyph> backgrounds = new ArrayList<>();
+    private final Set<Integer> seen = new HashSet<>();
+    private final Set<String> readFonts = new HashSet<>();
     private int negativeOffsets;
 
     FontConverter(ConversionContext ctx) {
@@ -61,32 +68,28 @@ final class FontConverter {
     /** @return number of glyphs written */
     int convert() {
         Map<Integer, List<Glyph>> pages = new TreeMap<>();
-        for (String font : FONTS) {
-            JsonArray providers = Json.array(ctx.javaPack().json(font), "providers");
-            if (providers == null) {
-                continue;
-            }
-            for (JsonElement element : providers) {
-                if (!element.isJsonObject()) {
-                    continue;
-                }
-                JsonObject provider = element.getAsJsonObject();
-                switch (Json.string(provider, "type", "").replace("minecraft:", "")) {
-                    case "bitmap" -> readBitmap(provider, pages);
-                    case "space" -> readSpace(provider, pages);
-                    default -> {
-                    }
-                }
+        readFont(DEFAULT_FONT, pages);
+        List<String> others = new ArrayList<>();
+        for (String path : ctx.javaPack().paths()) {
+            String font = fontId(path);
+            if (font != null && !font.startsWith("minecraft:")) {
+                others.add(font);
             }
         }
+        others.sort(null);
+        for (String font : others) {
+            readFont(font, pages);
+        }
         if (negativeOffsets > 0) {
-            ctx.log().warn(negativeOffsets + " negative font offsets skipped: Bedrock text cannot move backwards");
+            ctx.log().warn(negativeOffsets + " negative font offsets are invisible without width on Bedrock: text cannot move backwards");
         }
 
         int count = 0;
         for (Map.Entry<Integer, List<Glyph>> page : pages.entrySet()) {
             if (page.getKey() == 0xE0 || page.getKey() == 0xE1) {
                 ctx.log().warn(String.format("Font page U+%02X00 also holds Bedrock's own button icons; they are replaced on Bedrock", page.getKey()));
+            } else if (!privateUse(page.getKey() << 8)) {
+                ctx.log().warn(String.format("Font page U+%02X00 is not private use; its other characters are blank on Bedrock", page.getKey()));
             }
             writePage(page.getKey(), page.getValue());
             count += page.getValue().size();
@@ -97,6 +100,47 @@ final class FontConverter {
                     .toList());
         }
         return count;
+    }
+
+    /** {@code assets/<ns>/font/<path>.json} -> {@code <ns>:<path>}, or null for other files. */
+    private static String fontId(String path) {
+        if (!path.startsWith("assets/") || !path.endsWith(".json")) {
+            return null;
+        }
+        int slash = path.indexOf('/', 7);
+        if (slash < 0 || !path.startsWith("/font/", slash)) {
+            return null;
+        }
+        return path.substring(7, slash) + ":" + path.substring(slash + 6, path.length() - 5);
+    }
+
+    private void readFont(String font, Map<Integer, List<Glyph>> pages) {
+        ResourceId id = ResourceId.parse(font);
+        if (!readFonts.add(id.namespace() + ":" + id.path())) {
+            return; // read already, or a reference cycle
+        }
+        JsonArray providers = Json.array(ctx.javaPack().json(id.asset("font", ".json")), "providers");
+        if (providers == null) {
+            return;
+        }
+        for (JsonElement element : providers) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject provider = element.getAsJsonObject();
+            switch (Json.string(provider, "type", "").replace("minecraft:", "")) {
+                case "bitmap" -> readBitmap(provider, pages);
+                case "space" -> readSpace(provider, pages);
+                case "reference" -> {
+                    String referenced = Json.string(provider, "id", null);
+                    if (referenced != null) {
+                        readFont(referenced, pages);
+                    }
+                }
+                default -> {
+                }
+            }
+        }
     }
 
     private void readBitmap(JsonObject provider, Map<Integer, List<Glyph>> pages) {
@@ -120,11 +164,12 @@ final class FontConverter {
         if (height <= 0 || ascent <= OFFSET_ASCENT) {
             for (int[] codePoints : codePointRows) {
                 for (int codePoint : codePoints) {
-                    if (!privateUse(codePoint)) {
+                    if (!replaceable(codePoint)) {
                         continue;
                     }
                     if (height <= 0) {
                         negativeOffsets++;
+                        add(pages, new Glyph(codePoint, null, 0, 0, 0));
                     } else {
                         // Java advance of a bitmap glyph: its scaled width plus one pixel of spacing.
                         add(pages, new Glyph(codePoint, null, height, ascent, height + 1));
@@ -148,7 +193,7 @@ final class FontConverter {
         for (int r = 0; r < codePointRows.size(); r++) {
             int[] codePoints = codePointRows.get(r);
             for (int c = 0; c < codePoints.length; c++) {
-                if (privateUse(codePoints[c])) {
+                if (replaceable(codePoints[c])) {
                     BufferedImage glyph = sheet.getSubimage(c * cellWidth, r * cellHeight, cellWidth, cellHeight);
                     add(pages, new Glyph(codePoints[c], glyph, height, ascent, 0));
                 }
@@ -165,23 +210,43 @@ final class FontConverter {
         for (Map.Entry<String, JsonElement> entry : advances.entrySet()) {
             int codePoint = entry.getKey().codePointAt(0);
             double advance = entry.getValue().getAsDouble();
-            if (!privateUse(codePoint)) {
+            if (!replaceable(codePoint)) {
                 continue;
             }
             if (advance < 0) {
                 negativeOffsets++;
-            } else if (advance > 0) {
-                add(pages, new Glyph(codePoint, null, 0, 0, advance));
             }
+            add(pages, new Glyph(codePoint, null, 0, 0, Math.max(0, advance)));
         }
     }
 
-    /** Only private-use characters: never replace real letters on Bedrock. */
     private static boolean privateUse(int codePoint) {
         return codePoint >= 0xE000 && codePoint <= 0xF8FF;
     }
 
+    /**
+     * Characters a glyph sheet may take over: private use, plus the rarely typed blocks content plugins also hand
+     * out (Nexo starts at U+A410, Yi syllables). Never the scripts players write in: everything below U+1000
+     * (Latin, Turkish, Greek, Cyrillic, Arabic, Hebrew, Indic, Thai), Hangul and CJK. Bedrock sheets only cover the
+     * basic plane.
+     */
+    private static boolean replaceable(int codePoint) {
+        if (privateUse(codePoint)) {
+            return true;
+        }
+        if (codePoint < 0x1000 || codePoint > 0xFFFF) {
+            return false;
+        }
+        boolean hangul = (codePoint >= 0x1100 && codePoint <= 0x11FF) || (codePoint >= 0xAC00 && codePoint <= 0xD7FF);
+        boolean cjk = codePoint >= 0x2E80 && codePoint <= 0x9FFF;
+        boolean compatibility = codePoint >= 0xF900; // CJK compatibility, presentation forms, fullwidth, specials
+        return !hangul && !cjk && !compatibility;
+    }
+
     private void add(Map<Integer, List<Glyph>> pages, Glyph glyph) {
+        if (!seen.add(glyph.codePoint())) {
+            return; // the first font that defines a character wins, like Java's provider order
+        }
         pages.computeIfAbsent(glyph.codePoint() >> 8, k -> new ArrayList<>()).add(glyph);
         if (glyph.background()) {
             backgrounds.add(glyph);

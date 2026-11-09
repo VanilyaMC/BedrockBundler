@@ -38,6 +38,11 @@ final class ArmorConverter {
         }
         ResourceId asset = ResourceId.parse(assetId);
         JsonObject equipment = ctx.javaPack().json(asset.asset("equipment", ".json"));
+        if (equipSlot.equals("chest") && layerTexture(equipment, slot.javaLayer()) == null
+                && layerTexture(equipment, "wings") != null) {
+            elytra(bedrockId, flat, layerTexture(equipment, "wings"));
+            return;
+        }
         String textureId = layerTexture(equipment, slot.javaLayer());
         if (textureId == null) {
             ctx.log().warn("Armor " + bedrockId + ": equipment asset " + assetId + " has no '" + slot.javaLayer() + "' layer");
@@ -68,6 +73,65 @@ final class ArmorConverter {
         file.addProperty("format_version", "1.10.0");
         file.add("minecraft:attachable", attachable);
         ctx.bedrockPack().json("attachables/" + ConversionContext.NAMESPACE + "/" + flat + ".json", file);
+    }
+
+    /**
+     * Wings: the vanilla elytra attachable (geometry, animations and render controller referenced by id) with the
+     * item's texture. Java's {@code entity/equipment/wings} textures use the same 64x32 layout as Bedrock's.
+     */
+    private void elytra(String bedrockId, String flat, String textureId) {
+        ResourceId texture = ResourceId.parse(textureId);
+        BufferedImage image = ctx.textures().load(texture.namespace() + ":entity/equipment/wings/" + texture.path());
+        if (image == null) {
+            ctx.log().warn("Elytra " + bedrockId + ": wings texture " + textureId + " not found");
+            return;
+        }
+        String bedrockTexture = "textures/" + ConversionContext.NAMESPACE + "/armor/" + flat;
+        ctx.bedrockPack().file(bedrockTexture + ".png", Textures.png(image));
+
+        JsonObject description = new JsonObject();
+        description.addProperty("identifier", bedrockId);
+        description.add("materials", ItemConverter.stringMap("default", "elytra", "enchanted", "elytra_glint"));
+        description.add("textures", ItemConverter.stringMap("default", bedrockTexture, "enchanted", "textures/misc/enchanted_actor_glint"));
+        description.add("geometry", ItemConverter.stringMap("default", "geometry.elytra"));
+        description.add("animations", ItemConverter.stringMap(
+                "default_controller", "controller.animation.elytra.default",
+                "default", "animation.elytra.default",
+                "gliding", "animation.elytra.gliding",
+                "sneaking", "animation.elytra.sneaking",
+                "sleeping", "animation.elytra.sleeping",
+                "swimming", "animation.elytra.swimming"));
+        JsonObject scripts = new JsonObject();
+        scripts.addProperty("parent_setup", "variable.chest_layer_visible = 0.0;");
+        JsonArray animate = new JsonArray();
+        animate.add("default_controller");
+        scripts.add("animate", animate);
+        description.add("scripts", scripts);
+        JsonArray renderControllers = new JsonArray();
+        renderControllers.add("controller.render.armor.player");
+        description.add("render_controllers", renderControllers);
+
+        JsonObject attachable = new JsonObject();
+        attachable.add("description", description);
+        JsonObject file = new JsonObject();
+        file.addProperty("format_version", "1.10.0");
+        file.add("minecraft:attachable", attachable);
+        ctx.bedrockPack().json("attachables/" + ConversionContext.NAMESPACE + "/" + flat + ".json", file);
+    }
+
+    /**
+     * Bedrock item tags for animal armor. Bedrock decides on the client whether a horse takes an item; for custom
+     * items that is the {@code minecraft:horse_armor} tag. Java tells horse armor by the equipment asset's
+     * {@code horse_body} layer (or the vanilla base item).
+     */
+    java.util.List<String> tags(dev.bedrockadder.common.input.IaItem item) {
+        if (!"body".equals(item.equipSlot())) {
+            return java.util.List.of();
+        }
+        JsonObject equipment = item.armorAsset() == null ? null
+                : ctx.javaPack().json(ResourceId.parse(item.armorAsset()).asset("equipment", ".json"));
+        boolean horse = layerTexture(equipment, "horse_body") != null || item.material().endsWith("_horse_armor");
+        return horse ? java.util.List.of("minecraft:horse_armor") : java.util.List.of();
     }
 
     private static String layerTexture(JsonObject equipment, String layer) {

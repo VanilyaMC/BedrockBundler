@@ -161,6 +161,11 @@ public final class BedrockAdderExtension implements Extension {
         if (spec.protection() > 0) {
             options.protectionValue(spec.protection());
         }
+        if (spec.tags() != null) {
+            for (String tag : spec.tags()) {
+                options.tag(Identifier.of(tag));
+            }
+        }
 
         CustomItemDefinition.Builder builder = CustomItemDefinition.builder(Identifier.of(spec.bedrockId()), Identifier.of(spec.model()))
                 .bedrockOptions(options);
@@ -207,6 +212,7 @@ public final class BedrockAdderExtension implements Extension {
             case "chest" -> JavaEquippable.EquipmentSlot.CHEST;
             case "legs" -> JavaEquippable.EquipmentSlot.LEGS;
             case "feet" -> JavaEquippable.EquipmentSlot.FEET;
+            case "body" -> JavaEquippable.EquipmentSlot.BODY;
             default -> null;
         };
     }

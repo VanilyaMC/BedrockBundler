@@ -1,7 +1,6 @@
 package dev.bedrockadder.paper;
 
 import org.bukkit.Server;
-import org.bukkit.entity.Entity;
 import org.bukkit.plugin.Plugin;
 
 /**
@@ -31,11 +30,6 @@ public final class Scheduling {
 
     public static void globalLater(Plugin plugin, Runnable task, long ticks) {
         plugin.getServer().getGlobalRegionScheduler().runDelayed(plugin, t -> task.run(), Math.max(1, ticks));
-    }
-
-    /** Runs on the thread that owns the entity; does nothing if the entity is gone. */
-    public static void entity(Plugin plugin, Entity entity, Runnable task, long delayTicks) {
-        entity.getScheduler().runDelayed(plugin, t -> task.run(), null, Math.max(1, delayTicks));
     }
 
     private static boolean classExists(String name) {

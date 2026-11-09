@@ -5,7 +5,10 @@ import com.google.gson.JsonObject;
 import dev.bedrockadder.common.bedrock.Textures;
 
 import java.awt.image.BufferedImage;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * GUI backgrounds for chest menus. ItemsAdder puts a large glyph in the inventory title and moves it with
@@ -30,6 +33,7 @@ final class ChestUiWriter {
      * Bedrock's classic chest window has the same width and slot grid as Java, but its slots sit 4 px lower.
      */
     private static final int JAVA_TITLE_X = 8;
+    private static final int JAVA_WINDOW_WIDTH = 176;
     private static final int JAVA_TITLE_Y = 6;
     private static final int JAVA_TEXT_BASELINE = 7;
     private static final int BEDROCK_SLOT_SHIFT_Y = 4;
@@ -57,13 +61,14 @@ final class ChestUiWriter {
      */
     private JsonArray overlays(List<Background> backgrounds, int titleY) {
         JsonArray overlays = new JsonArray();
+        Map<Integer, Integer> offsets = offsets(backgrounds);
         for (Background background : backgrounds) {
             String texture = String.format("textures/%s/gui/u%04x", ConversionContext.NAMESPACE, background.codePoint());
             ctx.bedrockPack().file(texture + ".png", Textures.png(background.image()));
 
             int height = (int) Math.round(background.height());
             int width = (int) Math.round(background.image().getWidth() * background.height() / background.image().getHeight());
-            int x = JAVA_TITLE_X + ctx.options().guiOffsetX();
+            int x = JAVA_TITLE_X + offsets.get(background.codePoint());
             int y = JAVA_TITLE_Y + JAVA_TEXT_BASELINE - (int) Math.round(background.ascent()) + BEDROCK_SLOT_SHIFT_Y;
             String glyph = new String(Character.toChars(background.codePoint()));
 
@@ -96,6 +101,60 @@ final class ChestUiWriter {
             overlays.add(named(String.format("bedrockadder_gui_%04x_title", background.codePoint()), title));
         }
         return overlays;
+    }
+
+    /** Visible pixel bounds {minX, minY, maxX, maxY}, or null for an empty image. */
+    private static int[] bounds(BufferedImage image) {
+        int[] box = null;
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                if ((image.getRGB(x, y) >>> 24) != 0) {
+                    box = box == null ? new int[]{x, y, x, y}
+                            : new int[]{Math.min(box[0], x), Math.min(box[1], y), Math.max(box[2], x), Math.max(box[3], y)};
+                }
+            }
+        }
+        return box;
+    }
+
+    /**
+     * Horizontal offset per background. Explicit ones come from the menu titles of the content plugin. A plugin
+     * that gives any (Nexo) also builds some titles in code; for those a glyph that looks the same as one with a
+     * known offset (same size, ascent and visible area) shares it, and a texture whose visible part is exactly as
+     * wide as the chest window is lined up with the window. Everything else uses the configured default.
+     */
+    private Map<Integer, Integer> offsets(List<Background> backgrounds) {
+        ConversionContext.Options options = ctx.options();
+        Map<Integer, Integer> offsets = new HashMap<>();
+        Map<String, Integer> byShape = new HashMap<>();
+        Map<Integer, String> shapes = new HashMap<>();
+        for (Background background : backgrounds) {
+            int[] box = bounds(background.image());
+            String shape = background.height() + "/" + background.ascent() + "/" + background.image().getWidth()
+                    + "x" + background.image().getHeight() + "/" + Arrays.toString(box);
+            shapes.put(background.codePoint(), shape);
+            Integer explicit = options.guiOffsets().get(background.codePoint());
+            if (explicit != null) {
+                offsets.put(background.codePoint(), explicit);
+                byShape.putIfAbsent(shape, explicit);
+            }
+        }
+        for (Background background : backgrounds) {
+            int codePoint = background.codePoint();
+            if (offsets.containsKey(codePoint)) {
+                continue;
+            }
+            Integer offset = options.guiOffsets().isEmpty() ? null : byShape.get(shapes.get(codePoint));
+            if (offset == null && !options.guiOffsets().isEmpty()) {
+                int[] box = bounds(background.image());
+                double scale = background.height() / background.image().getHeight();
+                if (box != null && Math.round((box[2] - box[0] + 1) * scale) == JAVA_WINDOW_WIDTH) {
+                    offset = -JAVA_TITLE_X - (int) Math.round(box[0] * scale);
+                }
+            }
+            offsets.put(codePoint, offset != null ? offset : options.guiOffsetX());
+        }
+        return offsets;
     }
 
     /**

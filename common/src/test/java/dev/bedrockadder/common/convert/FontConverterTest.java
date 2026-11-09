@@ -145,4 +145,51 @@ class FontConverterTest {
         assertEquals(0, sheet.getRGB((0x09 & 0xF) * cell + cell - 1, cell - 1) >>> 24);
         assertEquals(0, sheet.getRGB((0x31 & 0xF) * cell, (0x31 >> 4) * cell + cell - 1) >>> 24);
     }
+
+    @Test
+    void nexoFontsReferencesAndShiftedGuiGlyphs() throws IOException {
+        // Nexo's layout: glyphs in nexo:default on U+A4xx, shifts in nexo:shift on U+E1xx, both fonts reference it.
+        Map<String, byte[]> pack = new HashMap<>();
+        pack.put("assets/test/textures/menu.png", Textures.png(solid(256, 256, 0xFF203040)));
+        pack.put("assets/test/textures/icon.png", Textures.png(solid(16, 16, 0xFFFF0000)));
+        pack.put("assets/minecraft/font/default.json", """
+                {"providers": [{"type": "bitmap", "file": "test:icon.png", "ascent": 8, "height": 8, "chars": ["ꐏ"]},
+                  {"type": "reference", "id": "nexo:shift"}]}""".getBytes(StandardCharsets.UTF_8));
+        pack.put("assets/nexo/font/default.json", """
+                {"providers": [{"type": "bitmap", "file": "test:menu.png", "ascent": 37, "height": 256, "chars": ["ꐑ"]},
+                  {"type": "reference", "id": "nexo:shift"}]}""".getBytes(StandardCharsets.UTF_8));
+        pack.put("assets/nexo/font/shift.json", """
+                {"providers": [{"type": "space", "advances": {"": -1, "": -32, "": 1}}]}"""
+                .getBytes(StandardCharsets.UTF_8));
+        ConversionContext.Options options = ConversionContext.Options.DEFAULT
+                .withGuiOffsets(0, GlyphTitleOffsets.find(
+                        List.of("menu_title: <shift:-32><shift:-5><glyph:menu_items>"),
+                        id -> id.equals("menu_items") ? "ꐑ" : null));
+        Converter.Result result = Converter.convert(new ConversionInput(pack, List.of(), List.of()), options, "Test");
+        Map<String, byte[]> mcpack = JavaPack.readZip(new ByteArrayInputStream(result.mcpack()));
+
+        // The shift page is written, so Bedrock's own button icons on U+E1xx never show up in titles.
+        BufferedImage shifts = ImageIO.read(new ByteArrayInputStream(mcpack.get("font/glyph_E1.png")));
+        assertNull(bounds(shifts, 0x01));
+        assertNull(bounds(shifts, 0x06));
+        BufferedImage yi = ImageIO.read(new ByteArrayInputStream(mcpack.get("font/glyph_A4.png")));
+        assertNotNull(bounds(yi, 0x0F), "the icon from minecraft:default");
+        assertNull(bounds(yi, 0x11), "the GUI background is drawn by the chest screen, not in text");
+
+        String ui = new String(mcpack.get("ui/chest_screen.json"), StandardCharsets.UTF_8);
+        // Java: x = 8 - 37 = -29, top = 6 + 7 - 37 = -24; Bedrock slots sit 4 px lower
+        assertTrue(ui.replaceAll("\\s", "").contains("\"offset\":[-29,-20]"), ui);
+    }
+
+    @Test
+    void neverTakesOverScriptsPlayersWrite() throws IOException {
+        Map<String, byte[]> mcpack = convert("""
+                {"providers": [
+                  {"type": "bitmap", "file": "test:font/icons.png", "height": 8, "ascent": 7, "chars": ["ı가一ꐐ"]}
+                ]}""", solid(16, 16, 0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFFFFFF00));
+        assertFalse(mcpack.containsKey("font/glyph_01.png"), "Turkish dotless i");
+        assertFalse(mcpack.containsKey("font/glyph_AC.png"), "Hangul");
+        assertFalse(mcpack.containsKey("font/glyph_4E.png"), "CJK");
+        assertTrue(mcpack.containsKey("font/glyph_A4.png"), "Yi syllables, which Nexo hands out");
+    }
 }

@@ -4,6 +4,8 @@ import dev.bedrockadder.common.convert.ConversionContext;
 import dev.bedrockadder.common.input.IaBlock;
 import dev.bedrockadder.common.input.IaItem;
 import org.bukkit.entity.ItemDisplay;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.util.Transformation;
 
 import java.util.List;
 import java.util.Map;
@@ -36,7 +38,26 @@ public interface ContentSource {
     /** Whether this item display is one of the plugin's furniture pieces. Called on the display's own thread. */
     boolean isFurniture(ItemDisplay display);
 
-    /** Adjusts conversion options to how this plugin renders its content. */
+    /** Whether a stack is one of the plugin's custom items (used for thrown tridents). */
+    boolean isCustomItem(ItemStack item);
+
+    /**
+     * The item an item display shows. Plugins that send the item with packets only (Nexo furniture) leave the
+     * entity's own item empty. Called on the display's own thread.
+     */
+    default ItemStack displayItem(ItemDisplay display) {
+        return display.getItemStack();
+    }
+
+    /**
+     * The transformation an item display is drawn with. Plugins that animate furniture with packets (Nexo doors)
+     * leave the entity's own transformation at the closed state. Called on the display's own thread.
+     */
+    default Transformation transformation(ItemDisplay display) {
+        return display.getTransformation();
+    }
+
+    /** Adjusts conversion options to how this plugin renders its content. Called on the global thread per run. */
     default ConversionContext.Options adjust(ConversionContext.Options options) {
         return options;
     }

@@ -61,6 +61,7 @@ public final class ItemSnapshots {
             case CHEST -> "chest";
             case LEGS -> "legs";
             case FEET -> "feet";
+            case BODY -> "body";
             default -> null;
         };
     }

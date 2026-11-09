@@ -226,6 +226,11 @@ public final class JavaPack {
         return files.get(path);
     }
 
+    /** All file paths of the effective pack (overlays applied). */
+    public java.util.Set<String> paths() {
+        return java.util.Collections.unmodifiableSet(files.keySet());
+    }
+
     public boolean has(String path) {
         return files.containsKey(path);
     }

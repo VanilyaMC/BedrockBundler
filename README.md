@@ -145,6 +145,9 @@ glyphs (font providers). `--geyser` writes `packs/<pack-name>.mcpack`, `custom_m
 `custom_mappings/<prefix>_blocks.json`. Furniture still needs the plugin on the server (or another way to render item
 displays on Bedrock).
 
+Use the JSON mappings (from the CLI or `geyser_mappings.json` / `geyser_block_mappings.json` in the bundle) only on a
+Geyser without the BedrockAdder extension. With both, Geyser registers every item and block twice.
+
 ## Configuration
 
 `plugins/BedrockAdder/config.yml`:

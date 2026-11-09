@@ -25,6 +25,7 @@ libs/
 # Local test servers and test material (root only: src/test holds the unit tests)
 /run/
 /test/
+/test-nexo/
 /test_ss/
 
 # Logs

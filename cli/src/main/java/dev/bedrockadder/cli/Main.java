@@ -56,6 +56,8 @@ public final class Main {
                 .withFurnitureDisplay(options.getOrDefault("furniture-display", "none"));
 
         NexoFolder folder = new NexoFolder(nexo);
+        // Nexo places GUI glyphs with explicit shifts; without one a glyph starts at the title.
+        conversionOptions = conversionOptions.withGuiOffsets(0, folder.glyphOffsets());
         ConversionInput input = folder.input(generated);
         Converter.Result result = Converter.convert(input, conversionOptions, packName);
 

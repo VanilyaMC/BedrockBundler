@@ -23,7 +23,7 @@ import java.util.Set;
 public final class Converter {
 
     /** Bump whenever converter output changes, so servers regenerate bundles made by older versions. */
-    public static final int CONVERTER_VERSION = 11;
+    public static final int CONVERTER_VERSION = 15;
 
     public record Result(Bundle bundle, byte[] mcpack, byte[] mappings, byte[] blockMappings, List<String> warnings) {
     }
@@ -37,6 +37,43 @@ public final class Converter {
         return JavaPack.hash(input.javaPack(), extra);
     }
 
+    /**
+     * Furniture that changes its model by swapping the item_model of the displayed item, like Nexo's connectable
+     * furniture ({@code nexo:connectable/connectable} becomes {@code ..._left}, {@code _inner} and so on next to a
+     * neighbour). Every item definition named {@code <model>_<variant>} next to a furniture item's model becomes an
+     * item of its own, so Geyser knows those models too.
+     */
+    static List<IaItem> modelVariants(List<IaItem> items, JavaPack pack) {
+        Set<String> known = new HashSet<>();
+        for (IaItem item : items) {
+            if (item.itemModel() != null) {
+                known.add(item.itemModel());
+            }
+        }
+        List<IaItem> variants = new ArrayList<>();
+        for (IaItem item : items) {
+            if (!item.furniture() || item.itemModel() == null) {
+                continue;
+            }
+            dev.bedrockadder.common.ResourceId model = dev.bedrockadder.common.ResourceId.parse(item.itemModel());
+            String prefix = "assets/" + model.namespace() + "/items/" + model.path() + "_";
+            for (String path : pack.paths().stream().sorted().toList()) {
+                if (!path.startsWith(prefix) || !path.endsWith(".json")) {
+                    continue;
+                }
+                String suffix = path.substring(prefix.length(), path.length() - 5);
+                String variantModel = model.namespace() + ":" + model.path() + "_" + suffix;
+                if (suffix.contains("/") || !known.add(variantModel)) {
+                    continue;
+                }
+                variants.add(new IaItem(item.id() + "_" + suffix, item.material(), variantModel, null,
+                        item.displayName(), item.maxStackSize(), item.maxDamage(), item.equipSlot(), item.armorAsset(),
+                        item.protection(), item.food(), item.block(), true));
+            }
+        }
+        return variants;
+    }
+
     public static Result convert(ConversionInput input, ConversionContext.Options options, String packName) {
         ConversionLog log = new ConversionLog();
         JavaPack javaPack = new JavaPack(input.javaPack());
@@ -45,6 +82,7 @@ public final class Converter {
                 new Textures(javaPack, log), bedrockPack, log, options);
 
         List<IaItem> sortedItems = new ArrayList<>(input.items());
+        sortedItems.addAll(modelVariants(input.items(), javaPack));
         sortedItems.sort(Comparator.comparing(IaItem::id));
         ItemConverter itemConverter = new ItemConverter(ctx);
         List<ItemSpec> items = new ArrayList<>();

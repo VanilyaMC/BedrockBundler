@@ -103,10 +103,13 @@ final class ConversionService {
         List<String> skippedBlocks = new ArrayList<>();
         List<IaBlock> blocks = source.blocks(skippedBlocks);
         ConversionInput input = new ConversionInput(javaPack, items, blocks);
-        executor.execute(() -> run(input, skippedBlocks, force, sender));
+        // Per run: the content plugin's configs (menu titles) can change between reloads.
+        ConversionContext.Options options = source.adjust(this.options);
+        executor.execute(() -> run(input, options, skippedBlocks, force, sender));
     }
 
-    private void run(ConversionInput input, List<String> skippedBlocks, boolean force, CommandSender sender) {
+    private void run(ConversionInput input, ConversionContext.Options options, List<String> skippedBlocks,
+                     boolean force, CommandSender sender) {
         try {
             String hash = Converter.hash(input, options);
             Bundle existing = Bundle.read(bundleFolder);

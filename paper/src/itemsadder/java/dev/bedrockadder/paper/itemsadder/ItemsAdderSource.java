@@ -56,7 +56,11 @@ public final class ItemsAdderSource implements ContentSource {
 
     @Override
     public boolean isFurniture(ItemDisplay display) {
-        ItemStack item = display.getItemStack();
+        return isCustomItem(display.getItemStack());
+    }
+
+    @Override
+    public boolean isCustomItem(ItemStack item) {
         return item != null && !item.getType().isAir() && CustomStack.byItemStack(item) != null;
     }
 }

@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import dev.bedrockadder.common.Json;
 import dev.bedrockadder.common.ResourceId;
+import dev.bedrockadder.common.convert.GlyphTitleOffsets;
 import dev.bedrockadder.common.input.ConversionInput;
 import dev.bedrockadder.common.input.IaBlock;
 import dev.bedrockadder.common.input.IaItem;
@@ -52,6 +53,36 @@ public final class NexoFolder {
 
     public List<String> warnings() {
         return List.copyOf(warnings);
+    }
+
+    /**
+     * Shifts Nexo's menu titles put in front of GUI glyphs ({@code <shift:-37><glyph:menu_items>}), from the YAML
+     * files of the Nexo folder; see {@link GlyphTitleOffsets}.
+     */
+    public Map<Integer, Integer> glyphOffsets() throws IOException {
+        List<String> texts = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(folder)) {
+            for (Path file : walk.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".yml"))
+                    .sorted(Comparator.comparing(Path::toString)).toList()) {
+                try {
+                    String text = Files.readString(file, java.nio.charset.StandardCharsets.UTF_8);
+                    if (text.contains("<shift:")) {
+                        texts.add(text);
+                    }
+                } catch (IOException | RuntimeException ignored) {
+                    // not UTF-8 text
+                }
+            }
+        }
+        return GlyphTitleOffsets.find(texts, id -> {
+            Map<String, Object> glyph = glyphs.get(id);
+            Object chars = glyph == null ? null : glyph.get("char");
+            if (chars == null && glyph != null && glyph.get("chars") instanceof List<?> rows && !rows.isEmpty()) {
+                chars = rows.get(0);
+            }
+            return chars == null ? null : String.valueOf(chars);
+        });
     }
 
     public int itemCount() {
@@ -161,6 +192,7 @@ public final class NexoFolder {
             case "CHEST" -> "chest";
             case "LEGS" -> "legs";
             case "FEET" -> "feet";
+            case "BODY" -> "body";
             default -> null;
         };
         String armorAsset = equippable == null ? null : string(equippable, "asset_id", null);

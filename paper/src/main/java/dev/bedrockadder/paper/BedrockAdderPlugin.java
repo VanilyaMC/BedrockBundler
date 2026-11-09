@@ -25,6 +25,7 @@ public final class BedrockAdderPlugin extends JavaPlugin {
     private Settings settings;
     private ConversionService conversion;
     private FurnitureMirror furniture;
+    private BedrockPlayers bedrockPlayers;
     private ContentSource source;
 
     @Override
@@ -51,14 +52,15 @@ public final class BedrockAdderPlugin extends JavaPlugin {
             getLogger().log(Level.SEVERE, "Could not set up sync type " + settings.syncType() + "; bundles are only written locally", e);
             deployer = offDeployer();
         }
-        conversion = new ConversionService(this, deployer, source.adjust(
-                new ConversionContext.Options(settings.iconSize(), settings.fonts(), settings.fontCellUnits(), settings.guiOffsetX())),
+        conversion = new ConversionService(this, deployer,
+                new ConversionContext.Options(settings.iconSize(), settings.fonts(), settings.fontCellUnits(), settings.guiOffsetX()),
                 settings.packName());
         conversion.deployExisting();
         getLogger().info("Bedrock bundles go to: " + deployer.describe());
 
+        bedrockPlayers = BedrockPlayers.detect(getServer());
         if (settings.furniture()) {
-            BedrockPlayers bedrock = BedrockPlayers.detect(getServer());
+            BedrockPlayers bedrock = bedrockPlayers;
             if (bedrock == null) {
                 getLogger().warning("Furniture for Bedrock needs Floodgate or Geyser-Spigot on this server; it is disabled.");
             } else {
@@ -184,6 +186,11 @@ public final class BedrockAdderPlugin extends JavaPlugin {
     /** Snapshots the registry (global thread) and converts in the background. */
     public void convert(Map<String, byte[]> files, boolean force, CommandSender sender) {
         Scheduling.global(this, () -> conversion.convert(source, files, force, sender));
+    }
+
+    /** Whether a player joined through Geyser; false when neither Floodgate nor Geyser is on this server. */
+    public boolean isBedrock(org.bukkit.entity.Player player) {
+        return bedrockPlayers != null && bedrockPlayers.isBedrock(player);
     }
 
     public boolean autoConvert() {

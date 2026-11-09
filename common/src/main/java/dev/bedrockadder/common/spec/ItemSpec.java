@@ -11,6 +11,7 @@ package dev.bedrockadder.common.spec;
  * @param handheld        renders like a tool in hand
  * @param creativeCategory {@code items}, {@code equipment}, {@code construction} or {@code nature}
  * @param protection      armor points shown on Bedrock
+ * @param tags            Bedrock item tags, e.g. {@code minecraft:horse_armor} so horses accept the item
  */
 public record ItemSpec(
         String javaItem,
@@ -25,7 +26,8 @@ public record ItemSpec(
         Integer maxDamage,
         String equipSlot,
         int protection,
-        Food food
+        Food food,
+        java.util.List<String> tags
 ) {
 
     public record Food(int nutrition, float saturation, boolean canAlwaysEat) {

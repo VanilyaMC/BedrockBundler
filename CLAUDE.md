@@ -51,7 +51,7 @@ Furniture is runtime, not conversion: `FurnitureMirror` (paper) spawns a non-per
 - **The ItemsAdder API jar is obfuscated without generics or inner-class metadata.** Cast elements of `getNamespacedIdsInRegistry()`. Use `var` for `PackEntry`, and `String.valueOf(event.getCause())` instead of naming `ItemsAdderLoadDataEvent.Cause`.
 - **Always use `Locale.ROOT` for case conversion.** A Turkish JVM locale turns `i` into `İ` (ItemsAdder itself breaks this way; servers need `-Duser.language=en`).
 - **Bedrock identifiers must start with a letter.** `ResourceId.flat()` strips ItemsAdder's leading `_` (namespace `_iainternal`); the client refused to join otherwise.
-- **3D attachables** need the root bone `binding` (`ITEM_BINDING` in `GeometryConverter`) or models float at the player origin. Java→Bedrock geometry mirrors x (`origin = [-to.x + 8, from.y, from.z - 8]`).
+- **3D attachables** need the top bone `binding` (`ITEM_BINDING` in `GeometryConverter`) or models float at the player origin. Below it sit arm and hand bones that replay player motion Bedrock only plays for vanilla items (shield blocking), then the display-transform bones. Java→Bedrock geometry mirrors x (`origin = [-to.x + 8, from.y, from.z - 8]`).
 
 ## Fonts and GUI backgrounds
 
@@ -64,4 +64,5 @@ Furniture is runtime, not conversion: `FurnitureMirror` (paper) spawns a non-per
 
 - **Unit tests** cover the converter with fixture packs that mirror real ItemsAdder output (`ItemsAdderPackLayoutTest`). Several bugs only showed up against a real ItemsAdder pack and real Bedrock client, so verify visual changes in game.
 - **Local test server.** `test/` is a git-ignored Leaf test server, started with `start.bat`; `test_ss/` holds Java vs Bedrock comparison screenshots. Don't replace the plugin jar while that server is running: ask the user to stop it, then copy `paper/build/libs/BedrockAdder-*.jar` into `test/plugins/`. Two restarts are needed for converter changes: convert, then Geyser load.
+- **Nexo test server.** `test-nexo/` (git-ignored) is the same Leaf server with Nexo instead of ItemsAdder, on port 25566. The same jar-swap rule applies.
 - **Reference files.** Vanilla Bedrock UI JSON can be read for reference from the installed client's `data/resource_packs/vanilla/__brarchive/ui.brarchive`, which is an uncompressed archive. Do not copy it into the pack.

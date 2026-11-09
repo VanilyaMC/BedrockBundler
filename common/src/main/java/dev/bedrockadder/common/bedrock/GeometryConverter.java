@@ -19,7 +19,13 @@ public final class GeometryConverter {
     /** Root bone of item geometry; display transforms animate this bone and its axis children. */
     public static final String ITEM_ROOT = "bedrockadder";
 
-    /** Molang binding of the item root bone to the holder's slot bone. */
+    /** Bones above the root: binding, right and left arm motion, hand motion (see {@link #item}). */
+    public static final String HOLD = "_hold";
+    public static final String ARM_RIGHT = "_arm_r";
+    public static final String ARM_LEFT = "_arm_l";
+    public static final String HAND = "_hand";
+
+    /** Molang binding of the item's top bone to the holder's slot bone. */
     static final String ITEM_BINDING = "c.item_slot == 'head' ? 'head' : q.item_slot_to_bone_name(c.item_slot)";
 
     private GeometryConverter() {
@@ -40,11 +46,19 @@ public final class GeometryConverter {
         }
 
         JsonArray bones = new JsonArray();
-        JsonObject root = bone(ITEM_ROOT, null, null);
+        JsonObject hold = bone(ITEM_ROOT + HOLD, null, null);
         // Attach to the bone of the slot holding the item (right/left hand, head). Without a binding the
         // model is drawn at the player's origin: not in the hand and not following the swing animation.
-        root.addProperty("binding", ITEM_BINDING);
-        bones.add(root);
+        hold.addProperty("binding", ITEM_BINDING);
+        bones.add(hold);
+        // The holder's arm and hand motion for poses Bedrock only plays for vanilla items (shield blocking).
+        // The hand pivot is the grip: where the third person hand pose puts the Java model centre (ItemConverter,
+        // pivot [0, 8, 0] moved by [0, 13, -3] and turned 90 degrees). The shoulders sit [+-1, 7, -1] from the hand,
+        // as rightArm/rightItem and leftArm/leftItem in the player geometry.
+        bones.add(bone(ITEM_ROOT + ARM_RIGHT, ITEM_ROOT + HOLD, null, 1, 28, -4));
+        bones.add(bone(ITEM_ROOT + ARM_LEFT, ITEM_ROOT + ARM_RIGHT, null, -1, 28, -4));
+        bones.add(bone(ITEM_ROOT + HAND, ITEM_ROOT + ARM_LEFT, null, 0, 21, -3));
+        bones.add(bone(ITEM_ROOT, ITEM_ROOT + HAND, null));
         bones.add(bone(ITEM_ROOT + "_x", ITEM_ROOT, null));
         bones.add(bone(ITEM_ROOT + "_y", ITEM_ROOT + "_x", null));
         bones.add(bone(ITEM_ROOT + "_z", ITEM_ROOT + "_y", cubes));
@@ -87,12 +101,16 @@ public final class GeometryConverter {
     }
 
     private static JsonObject bone(String name, String parent, JsonArray cubes) {
+        return bone(name, parent, cubes, 0, 8, 0);
+    }
+
+    private static JsonObject bone(String name, String parent, JsonArray cubes, float px, float py, float pz) {
         JsonObject bone = new JsonObject();
         bone.addProperty("name", name);
         if (parent != null) {
             bone.addProperty("parent", parent);
         }
-        bone.add("pivot", Json.array(0, 8, 0));
+        bone.add("pivot", Json.array(px, py, pz));
         if (cubes != null) {
             bone.add("cubes", cubes);
         }

@@ -11,14 +11,17 @@ import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Trident;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Transformation;
+import org.bukkit.util.Vector;
 import org.joml.Vector3f;
 
 import java.util.Map;
@@ -36,8 +39,9 @@ import java.util.logging.Level;
  *
  * <p>Region-threading safe (Folia, Canvas): each display is handled by a task on the display's own entity
  * scheduler, the stand is spawned at the display's position (same region) and moved with
- * {@code teleportAsync}, and players are only touched on their own scheduler. On Paper the same schedulers run on
- * the main thread.
+ * {@code teleportAsync}, and a stand is shown only to Bedrock players in the display's own region (players
+ * elsewhere get it once their region and the display's merge). On Paper the same schedulers run on the main
+ * thread.
  */
 final class FurnitureMirror implements Listener {
 
@@ -86,6 +90,8 @@ final class FurnitureMirror implements Listener {
                         entity.remove();
                     } else if (entity instanceof ItemDisplay display) {
                         track(display);
+                    } else if (entity instanceof Trident trident) {
+                        trackTrident(trident);
                     }
                 }
             }
@@ -112,12 +118,14 @@ final class FurnitureMirror implements Listener {
     public void onAdd(EntityAddToWorldEvent event) {
         if (event.getEntity() instanceof ItemDisplay display) {
             track(display);
+        } else if (event.getEntity() instanceof Trident trident) {
+            trackTrident(trident);
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onRemove(EntityRemoveFromWorldEvent event) {
-        if (event.getEntity() instanceof ItemDisplay) {
+        if (event.getEntity() instanceof ItemDisplay || event.getEntity() instanceof Trident) {
             untrack(event.getEntity().getUniqueId());
         }
     }
@@ -125,19 +133,17 @@ final class FurnitureMirror implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        // Floodgate may need a moment to register the session.
+        // Floodgate may need a moment to register the session. The display tasks show the stands to the player
+        // on their next run, each on the thread that owns that stand.
         player.getScheduler().runDelayed(plugin, t -> {
             if (player.isOnline() && bedrock.isBedrock(player)) {
                 bedrockPlayers.put(player.getUniqueId(), player);
-                for (ArmorStand mirror : mirrors.values()) {
-                    show(player, mirror);
-                }
             }
         }, null, 5);
     }
 
     @EventHandler
-    public void onQuit(org.bukkit.event.player.PlayerQuitEvent event) {
+    public void onQuit(PlayerQuitEvent event) {
         bedrockPlayers.remove(event.getPlayer().getUniqueId());
     }
 
@@ -172,9 +178,10 @@ final class FurnitureMirror implements Listener {
                 return; // recreated on the next run
             }
             update(display, mirror);
+            showToBedrock(mirror);
         }, () -> untrack(id), 1, SYNC_TICKS);
-        if (task != null) {
-            tasks.put(id, task);
+        if (task != null && tasks.putIfAbsent(id, task) != null) {
+            task.cancel(); // tracked concurrently by another event
         }
     }
 
@@ -190,54 +197,113 @@ final class FurnitureMirror implements Listener {
     }
 
     private void removeMirror(ArmorStand mirror) {
-        // The stand may sit in another region by now; remove it on its own thread.
-        if (!mirror.getScheduler().execute(plugin, mirror::remove, null, 1L) && !Scheduling.isFolia()) {
+        if (!Scheduling.isFolia() || plugin.getServer().isOwnedByCurrentRegion(mirror)) {
             mirror.remove();
+            return;
+        }
+        // The stand sits in another region; remove it on its own thread. While the plugin is disabling no task
+        // can be scheduled any more; the stand is not persistent, so it is gone with its chunk.
+        try {
+            mirror.getScheduler().execute(plugin, mirror::remove, null, 1L);
+        } catch (RuntimeException ignored) {
+            // plugin disabled
+        }
+    }
+
+    /**
+     * Thrown custom tridents. The content plugin draws them with its own (packet) item display, which Bedrock
+     * cannot show, so a stand wearing the trident follows it every tick. The stand cannot tilt: the model keeps
+     * its furniture pose and only turns towards the flight direction.
+     */
+    private void trackTrident(Trident trident) {
+        UUID id = trident.getUniqueId();
+        if (!running || tasks.containsKey(id) || !source.isCustomItem(trident.getItemStack())) {
+            return;
+        }
+        float[] yaw = {trident.getLocation().getYaw()};
+        ScheduledTask task = trident.getScheduler().runAtFixedRate(plugin, t -> {
+            if (!trident.isValid()) {
+                untrack(id);
+                return;
+            }
+            Vector velocity = trident.getVelocity();
+            if (velocity.lengthSquared() > 1.0E-4) {
+                yaw[0] = (float) Math.toDegrees(Math.atan2(-velocity.getX(), velocity.getZ())) + yawOffset;
+            }
+            Location target = trident.getLocation().add(0, yOffset - 0.5, 0);
+            target.setYaw(yaw[0]);
+            target.setPitch(0);
+            ArmorStand mirror = mirrors.get(id);
+            if (mirror == null || !mirror.isValid()) {
+                try {
+                    mirror = trident.getWorld().spawn(target, ArmorStand.class, this::configureStand);
+                } catch (RuntimeException e) {
+                    plugin.getLogger().log(Level.FINE, "Could not mirror trident " + id, e);
+                    return;
+                }
+                mirror.getEquipment().setHelmet(trident.getItemStack());
+                mirrors.put(id, mirror);
+            } else if (mirror.getLocation().distanceSquared(target) > 1.0E-6
+                    || Math.abs(mirror.getLocation().getYaw() - target.getYaw()) > 0.01f) {
+                mirror.teleportAsync(target);
+            }
+            showToBedrock(mirror);
+        }, () -> untrack(id), 1, 1);
+        if (task != null && tasks.putIfAbsent(id, task) != null) {
+            task.cancel();
         }
     }
 
     /** Runs on the display's thread; the stand spawns at the display's position, so in the same region. */
     private void createMirror(ItemDisplay display) {
-        ArmorStand mirror = display.getWorld().spawn(target(display), ArmorStand.class, stand -> {
-            stand.setVisibleByDefault(false); // Java players never see it
-            stand.setPersistent(false);       // never saved with the chunk
-            stand.addScoreboardTag(TAG);
-            stand.setInvisible(true);
-            stand.setMarker(true);            // no hitbox: clicks reach the plugin's own hitbox entities
-            stand.setGravity(false);
-            stand.setSilent(true);
-            stand.setInvulnerable(true);
-            stand.setBasePlate(false);
-            for (EquipmentSlot slot : EquipmentSlot.values()) {
-                try {
-                    stand.addEquipmentLock(slot, ArmorStand.LockType.REMOVING_OR_CHANGING);
-                } catch (IllegalArgumentException ignored) {
-                    // slot that armor stands do not have
-                }
-            }
-        });
+        ArmorStand mirror = display.getWorld().spawn(target(display), ArmorStand.class, this::configureStand);
         mirrors.put(display.getUniqueId(), mirror);
         update(display, mirror);
-        for (Player player : bedrockPlayers.values()) {
-            player.getScheduler().run(plugin, t -> show(player, mirror), null);
+        showToBedrock(mirror);
+    }
+
+    private void configureStand(ArmorStand stand) {
+        stand.setVisibleByDefault(false); // Java players never see it
+        stand.setPersistent(false);       // never saved with the chunk
+        stand.addScoreboardTag(TAG);
+        stand.setInvisible(true);
+        stand.setMarker(true);            // no hitbox: clicks reach the plugin's own hitbox entities
+        stand.setGravity(false);
+        stand.setSilent(true);
+        stand.setInvulnerable(true);
+        stand.setBasePlate(false);
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            try {
+                stand.addEquipmentLock(slot, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            } catch (IllegalArgumentException ignored) {
+                // slot that armor stands do not have
+            }
         }
     }
 
-    private void show(Player player, ArmorStand mirror) {
-        try {
-            player.showEntity(plugin, mirror);
-        } catch (RuntimeException e) {
-            // A stand in a far region; it is shown again when the player rejoins.
-            plugin.getLogger().log(Level.FINE, "Could not show a furniture mirror to " + player.getName(), e);
+    /**
+     * Shows the stand to the Bedrock players this thread owns. Runs on every sync, so players who join later or
+     * whose region merges with the display's get the stand too; touching players of other regions is not allowed.
+     */
+    private void showToBedrock(ArmorStand mirror) {
+        for (Player player : bedrockPlayers.values()) {
+            try {
+                if (plugin.getServer().isOwnedByCurrentRegion(player) && player.isOnline()
+                        && player.getWorld().equals(mirror.getWorld()) && !player.canSee(mirror)) {
+                    player.showEntity(plugin, mirror);
+                }
+            } catch (RuntimeException e) {
+                plugin.getLogger().log(Level.FINE, "Could not show a furniture mirror to " + player.getName(), e);
+            }
         }
     }
 
     private void update(ItemDisplay display, ArmorStand mirror) {
-        ItemStack item = display.getItemStack();
-        if (!Objects.equals(mirror.getEquipment().getHelmet(), item)) {
+        ItemStack item = source.displayItem(display);
+        if (item != null && !Objects.equals(mirror.getEquipment().getHelmet(), item)) {
             mirror.getEquipment().setHelmet(item);
         }
-        float scale = display.getTransformation().getScale().y();
+        float scale = source.transformation(display).getScale().y();
         AttributeInstance scaleAttribute = mirror.getAttribute(Attribute.SCALE);
         if (scaleAttribute != null && Math.abs(scaleAttribute.getBaseValue() - scale) > 0.001) {
             scaleAttribute.setBaseValue(Math.max(0.0625, Math.min(16, scale)));
@@ -255,7 +321,7 @@ final class FurnitureMirror implements Listener {
      */
     private Location target(ItemDisplay display) {
         Location location = display.getLocation();
-        Transformation transformation = display.getTransformation();
+        Transformation transformation = source.transformation(display);
         // The translation is in the display's local frame, which is turned by the entity's yaw.
         Vector3f translation = new Vector3f(transformation.getTranslation())
                 .rotateY((float) Math.toRadians(-location.getYaw()));

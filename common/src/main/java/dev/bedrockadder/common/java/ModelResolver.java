@@ -78,6 +78,36 @@ public final class ModelResolver {
         return null;
     }
 
+    /**
+     * Whether an item draws nothing on purpose ({@code "type": "empty"}), like the invisible buttons of menus whose
+     * background glyph already shows them.
+     */
+    public boolean isEmpty(String itemModel) {
+        if (itemModel == null) {
+            return false;
+        }
+        JsonObject definition = pack.json(ResourceId.parse(itemModel).asset("items", ".json"));
+        JsonObject model = Json.object(definition, "model");
+        return model != null && Json.string(model, "type", "").replace("minecraft:", "").equals("empty");
+    }
+
+    /**
+     * The model an item switches to while it is used ({@code "type": "condition", "property": "using_item"}):
+     * a raised shield, a trident being charged. Null when the item has none.
+     */
+    public ResourceId usingItemModel(String itemModel) {
+        if (itemModel == null) {
+            return null;
+        }
+        JsonObject definition = pack.json(ResourceId.parse(itemModel).asset("items", ".json"));
+        JsonObject node = Json.object(definition, "model");
+        if (node == null || !Json.string(node, "type", "").replace("minecraft:", "").equals("condition")
+                || !Json.string(node, "property", "").replace("minecraft:", "").equals("using_item")) {
+            return null;
+        }
+        return pick(Json.object(node, "on_true"), null);
+    }
+
     /** Walks a 1.21.4+ item model definition tree down to a plain model reference. */
     private ResourceId pick(JsonObject node, Integer customModelData) {
         if (node == null) {

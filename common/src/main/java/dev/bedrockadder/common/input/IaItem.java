@@ -11,7 +11,7 @@ package dev.bedrockadder.common.input;
  * @param displayName      plain display name
  * @param maxStackSize     only set when it differs from the base item
  * @param maxDamage        only set when it differs from the base item
- * @param equipSlot        {@code head}, {@code chest}, {@code legs} or {@code feet} for wearables, else null
+ * @param equipSlot        {@code head}, {@code chest}, {@code legs}, {@code feet} or {@code body} (animal armor) for wearables, else null
  * @param armorAsset       equipment asset id ({@code equippable.asset_id}) for armor, else null
  * @param protection       armor points, for the Bedrock armor bar
  * @param food             food properties, or null
