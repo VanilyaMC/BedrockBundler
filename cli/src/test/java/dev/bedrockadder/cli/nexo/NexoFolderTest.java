@@ -79,6 +79,19 @@ class NexoFolderTest {
                       slot: HEAD
                 no_model:
                   material: STICK
+                chair:
+                  material: STONE
+                  Pack:
+                    model: "demo:item/chair"
+                  Components:
+                    item_model: "demo:chair"
+                  Mechanics:
+                    furniture:
+                      placeable: true
+                wing:
+                  material: ELYTRA
+                  Pack:
+                    texture: "demo:item/wing_icon"
                 """);
         write("glyphs/demo/glyphs.yml", """
                 coin:
@@ -105,6 +118,10 @@ class NexoFolderTest {
                  "display": {"head": {"translation": [0, 6, 0]}}}""");
         png("pack/assets/demo/textures/item/straw_hat.png", 0xFFE8C468);
         png("pack/assets/demo/textures/glyph/coin.png", 0xFFFFD700);
+        // No items/chair.json: Nexo generates it from Pack.model.
+        write("pack/assets/demo/models/item/chair.json", "{\"parent\": \"minecraft:item/generated\", \"textures\": {\"layer0\": \"demo:item/chair\"}}");
+        png("pack/assets/demo/textures/item/chair.png", 0xFF8B5A2B);
+        png("pack/assets/demo/textures/item/wing_icon.png", 0xFF7FC8F0);
 
         folder = new NexoFolder(nexo);
         input = folder.input(null);
@@ -149,6 +166,16 @@ class NexoFolderTest {
         assertTrue(mcpack.containsKey("attachables/bedrockadder/nexo_crop_stage.json"));
         // The glyph lands on Bedrock's E1 glyph sheet.
         assertTrue(mcpack.containsKey("font/glyph_E1.png"));
+    }
+
+    @Test
+    void synthesizesMissingItemDefinitions() {
+        assertEquals("demo:chair", item("nexo:chair").itemModel());
+        assertTrue(input.javaPack().containsKey("assets/demo/items/chair.json"));
+        // Texture-only items get nexo:<id>, as Nexo does with prefer_item_models.
+        assertEquals("nexo:wing", item("nexo:wing").itemModel());
+        assertTrue(input.javaPack().containsKey("assets/nexo/items/wing.json"));
+        assertTrue(result.warnings().stream().noneMatch(w -> w.contains("nexo:chair") || w.contains("nexo:wing")));
     }
 
     private static IaItem item(String id) {
