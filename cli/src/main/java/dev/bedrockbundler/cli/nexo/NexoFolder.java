@@ -145,7 +145,7 @@ public final class NexoFolder {
         for (Map.Entry<String, Map<String, Object>> entry : items.entrySet()) {
             String id = entry.getKey();
             Map<String, Object> config = entry.getValue();
-            IaItem item = item(id, config, pack);
+            IaItem item = item(id, config, pack, synthesize);
             if (item != null) {
                 itemList.add(item);
             }
@@ -164,13 +164,16 @@ public final class NexoFolder {
         return new ConversionInput(pack, itemList, blockList);
     }
 
-    private IaItem item(String id, Map<String, Object> config, Map<String, byte[]> pack) {
+    private IaItem item(String id, Map<String, Object> config, Map<String, byte[]> pack, boolean synthesize) {
         String material = "minecraft:" + string(config, "material", "PAPER").toLowerCase(Locale.ROOT);
         Map<String, Object> components = section(config, "Components");
         Map<String, Object> packSection = section(config, "Pack");
 
         String itemModel = string(components, "item_model", null);
         Integer customModelData = integer(packSection, "custom_model_data");
+        if (synthesize) {
+            itemModel = synthesizeItemDefinition(id, itemModel, customModelData, packSection, pack);
+        }
         if (itemModel == null && customModelData == null) {
             // With Pack.generation.prefer_item_models Nexo gives every item nexo:<id>.
             String fallback = "nexo:" + id;
@@ -232,6 +235,47 @@ public final class NexoFolder {
     /** Java display context of a thrown custom trident ({@code Mechanics.trident.display_transform}, default NONE). */
     private static String thrownDisplay(Map<String, Object> trident) {
         return trident == null ? null : string(trident, "display_transform", "NONE").toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Adds the item definition Nexo would generate when the pack has none: {@code items/<item_model>.json} pointing
+     * at {@code Pack.model}, or, for an item with only {@code Pack.texture}, a {@code nexo:<id>} definition and an
+     * {@code item/generated} model (Nexo does this with {@code prefer_item_models}). Files already in the pack win.
+     *
+     * @return the item model id to use (unchanged when nothing was added)
+     */
+    private String synthesizeItemDefinition(String id, String itemModel, Integer customModelData,
+                                            Map<String, Object> packSection, Map<String, byte[]> pack) {
+        if (packSection == null || customModelData != null && itemModel == null) {
+            return itemModel;
+        }
+        String model = string(packSection, "model", null);
+        String texture = string(packSection, "texture", null);
+        String target = itemModel != null ? itemModel : "nexo:" + id;
+        String definitionPath = ResourceId.parse(target).asset("items", ".json");
+        if (pack.containsKey(definitionPath)) {
+            return target;
+        }
+        if (model == null && texture != null) {
+            ResourceId textureId = ResourceId.parse(texture);
+            model = "nexo:item/" + id;
+            JsonObject generated = new JsonObject();
+            generated.addProperty("parent", "minecraft:item/generated");
+            JsonObject textures = new JsonObject();
+            textures.addProperty("layer0", textureId.toString());
+            generated.add("textures", textures);
+            pack.put(ResourceId.parse(model).asset("models", ".json"), Json.bytes(generated));
+        }
+        if (model == null) {
+            return itemModel;
+        }
+        JsonObject reference = new JsonObject();
+        reference.addProperty("type", "minecraft:model");
+        reference.addProperty("model", ResourceId.parse(model).toString());
+        JsonObject definition = new JsonObject();
+        definition.add("model", reference);
+        pack.put(definitionPath, Json.bytes(definition));
+        return target;
     }
 
     private IaBlock block(String id, Map<String, Object> config, Map<String, Object> block, Map<String, byte[]> pack,
