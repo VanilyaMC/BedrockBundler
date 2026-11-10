@@ -28,6 +28,7 @@ public final class BedrockBundlerPlugin extends JavaPlugin {
     private FurnitureMirror furniture;
     private BedrockPlayers bedrockPlayers;
     private ContentSource source;
+    private EmotePlayer emotePlayer;
 
     @Override
     public void onEnable() {
@@ -218,6 +219,14 @@ public final class BedrockBundlerPlugin extends JavaPlugin {
 
     public boolean autoConvert() {
         return settings.autoConvert();
+    }
+
+    /** Plays emotes for Bedrock players through Geyser on this server; one per plugin. */
+    public synchronized EmotePlayer emotePlayer() {
+        if (emotePlayer == null) {
+            emotePlayer = new EmotePlayer(this);
+        }
+        return emotePlayer;
     }
 
     ContentSource source() {

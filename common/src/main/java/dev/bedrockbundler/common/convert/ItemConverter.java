@@ -15,6 +15,7 @@ import dev.bedrockbundler.common.spec.ItemSpec;
 import java.awt.image.BufferedImage;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /** Turns ItemsAdder items into Geyser item specs plus their textures, geometry and attachables. */
 public final class ItemConverter {
@@ -48,9 +49,14 @@ public final class ItemConverter {
         POSES.put("firstperson_off_hand", new BasePose(new float[]{177.75f, 5.48f, -177.51f},
                 new float[]{-22.28f, 17.08f, 23.12f}, 1.5f));
         POSES.put("head", new BasePose(new float[]{0, 0, 0}, new float[]{0, 19.9f, 0}, 0.625f));
-        // Worn by BedrockBundler's furniture stand: the model centre sits half a block above the stand's feet,
-        // like an item_display renders the model centred on its position.
-        POSES.put("furniture", new BasePose(new float[]{0, 0, 0}, new float[]{0, 0, 0}, 1));
+        // Worn by BedrockBundler's furniture stand: the model centre sits at the stand's feet, which stand where
+        // the item display is, like an item_display renders the model centred on its position. Bedrock lights an
+        // entity from the block at its feet; with the feet half a block lower (the model centre's former place),
+        // furniture whose display sits on the floor (ItemsAdder HEAD displays) was lit from the ground: black.
+        // Bedrock draws the head attachable one model pixel lower than computed (measured in game: furniture
+        // sank 1 px into the block below), so the pose lifts it by one pixel; in model space, so it scales with
+        // the stand.
+        POSES.put("furniture", new BasePose(new float[]{0, 0, 0}, new float[]{0, 1 - 8, 0}, 1));
     }
 
     /** Bedrock attachable context -> Java display context (and the fallback used when it is absent). */
@@ -61,6 +67,14 @@ public final class ItemConverter {
             "firstperson_off_hand", new String[]{"firstperson_lefthand", "firstperson_righthand"},
             "head", new String[]{"head"},
             "furniture", new String[]{"fixed"});
+
+    /**
+     * Items Java throws as a projectile that draws the item ({@code ThrownItemRenderer}, ground context).
+     * FurnitureMirror makes Bedrock players see a stand wearing the custom item instead of the vanilla projectile.
+     */
+    static final Set<String> THROWN = Set.of("minecraft:snowball", "minecraft:egg",
+            "minecraft:blue_egg", "minecraft:brown_egg", "minecraft:ender_pearl", "minecraft:experience_bottle",
+            "minecraft:splash_potion", "minecraft:lingering_potion");
 
     private static final Map<String, String> CONDITIONS = Map.of(
             "thirdperson_main_hand", "v.main_hand && !c.is_first_person",
@@ -73,9 +87,38 @@ public final class ItemConverter {
     private final ConversionContext ctx;
     private final ArmorConverter armor;
 
+    /**
+     * A texture of the Bedrock client a model's faces use instead of a pack texture (vanilla painting motives):
+     * its Bedrock path and size. Such a model must use only that one texture.
+     */
+    record ExternalTexture(String bedrockPath, int width, int height) {
+    }
+
+    private final Map<String, ExternalTexture> external;
+
     public ItemConverter(ConversionContext ctx) {
+        this(ctx, Map.of());
+    }
+
+    ItemConverter(ConversionContext ctx, Map<String, ExternalTexture> external) {
         this.ctx = ctx;
         this.armor = new ArmorConverter(ctx);
+        this.external = external;
+    }
+
+    /** The external texture all faces of the model use, or null. */
+    private Map.Entry<String, ExternalTexture> externalTexture(JavaModel model) {
+        Map.Entry<String, ExternalTexture> found = null;
+        for (JavaModel.Element element : model.elements()) {
+            for (JavaModel.Face face : element.faces().values()) {
+                ExternalTexture texture = face.texture() == null ? null : external.get(face.texture());
+                if (texture == null) {
+                    return null;
+                }
+                found = Map.entry(face.texture(), texture);
+            }
+        }
+        return found;
     }
 
     public ItemSpec convert(IaItem item) {
@@ -100,8 +143,10 @@ public final class ItemConverter {
 
         boolean handheld = false;
         BufferedImage iconImage;
+        boolean externalModel = model != null && model.kind() == JavaModel.Kind.ELEMENTS && externalTexture(model) != null;
         if (model != null && model.kind() == JavaModel.Kind.ELEMENTS) {
-            iconImage = IconRenderer.render(model, ctx.textures()::load, ctx.options().iconSize());
+            // A model of a Bedrock client texture cannot be rendered here; it shows Bedrock's painting icon.
+            iconImage = externalModel ? null : IconRenderer.render(model, ctx.textures()::load, ctx.options().iconSize());
             ResourceId usingId = ctx.models().usingItemModel(item.itemModel());
             JavaModel using = usingId == null ? null : ctx.models().model(usingId);
             attachable(bedrockId, flat, model, using, item, worn, Map.of());
@@ -119,20 +164,26 @@ public final class ItemConverter {
             String texture = model == null ? null : model.primaryTexture();
             iconImage = texture == null ? null : ctx.textures().load(texture);
         }
+        String vanillaIcon = iconImage == null && !empty ? (externalModel ? "textures/items/painting" : vanillaIcon(model)) : null;
         if (empty) {
             iconImage = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB); // drawn by nothing on Java either
-        } else if (iconImage == null) {
+        } else if (iconImage == null && vanillaIcon == null) {
             iconImage = placeholderIcon();
         }
         String iconPath = "textures/" + ConversionContext.NAMESPACE + "/items/" + flat;
-        ctx.bedrockPack().file(iconPath + ".png", Textures.png(iconImage));
-        ctx.bedrockPack().itemTexture(icon, iconPath);
-        if (armor.replacesVanillaElytra(bedrockId)) {
+        if (vanillaIcon != null) {
+            // A vanilla texture the content plugin's pack does not carry: Bedrock's own copy of it.
+            ctx.bedrockPack().itemTexture(icon, vanillaIcon);
+        } else {
+            ctx.bedrockPack().file(iconPath + ".png", Textures.png(iconImage));
+            ctx.bedrockPack().itemTexture(icon, iconPath);
+        }
+        if (iconImage != null && armor.replacesVanillaElytra(bedrockId)) {
             // Worn, the item is the vanilla elytra on Bedrock, also in the player's own armor slot.
             ctx.bedrockPack().file(ArmorConverter.VANILLA_ELYTRA_ICON + ".png", Textures.png(iconImage));
         }
 
-        if (worn != null && (model == null || model.kind() != JavaModel.Kind.ELEMENTS)) {
+        if (worn != null && iconImage != null && (model == null || model.kind() != JavaModel.Kind.ELEMENTS)) {
             // No model to hold (missing or empty): the worn part alone.
             attachable(bedrockId, flat, GeneratedItemModel.of(model, iconImage, GeneratedItemModel.TEXTURE),
                     null, item, worn, Map.of(GeneratedItemModel.TEXTURE, iconImage));
@@ -200,21 +251,34 @@ public final class ItemConverter {
                             ArmorConverter.Worn worn, Map<String, BufferedImage> preloaded) {
         boolean shield = item.material().equals("minecraft:shield");
         boolean trident = item.material().equals("minecraft:trident");
-        // A thrown trident is drawn like an item display (FurnitureMirror): Nexo uses the display context of
-        // its trident mechanic, otherwise the furniture one is kept.
-        String thrownDisplay = item.thrownDisplay();
-        Map<String, BufferedImage> textures = new LinkedHashMap<>();
-        for (JavaModel.Element element : model.elements()) {
-            for (JavaModel.Face face : element.faces().values()) {
-                if (face.texture() != null) {
-                    textures.computeIfAbsent(face.texture(),
-                            id -> preloaded.containsKey(id) ? preloaded.get(id) : ctx.textures().load(id));
+        // The furniture pose draws what an entity shows (FurnitureMirror): a furniture item display, with the
+        // display context the content plugin gives that furniture, or a thrown trident (Nexo's trident mechanic)
+        // or other thrown item, which Java draws like a dropped item.
+        String entityDisplay = item.entityDisplay();
+        if (entityDisplay == null && THROWN.contains(item.material())) {
+            entityDisplay = "ground";
+        }
+        TextureAtlas atlas;
+        String texturePath;
+        Map.Entry<String, ExternalTexture> externalTexture = externalTexture(model);
+        if (externalTexture != null) {
+            ExternalTexture texture = externalTexture.getValue();
+            atlas = TextureAtlas.external(externalTexture.getKey(), texture.width(), texture.height());
+            texturePath = texture.bedrockPath();
+        } else {
+            Map<String, BufferedImage> textures = new LinkedHashMap<>();
+            for (JavaModel.Element element : model.elements()) {
+                for (JavaModel.Face face : element.faces().values()) {
+                    if (face.texture() != null) {
+                        textures.computeIfAbsent(face.texture(),
+                                id -> preloaded.containsKey(id) ? preloaded.get(id) : ctx.textures().load(id));
+                    }
                 }
             }
+            atlas = TextureAtlas.build(textures);
+            texturePath = "textures/" + ConversionContext.NAMESPACE + "/models/" + flat;
+            ctx.bedrockPack().file(texturePath + ".png", Textures.png(atlas.image()));
         }
-        TextureAtlas atlas = TextureAtlas.build(textures);
-        String texturePath = "textures/" + ConversionContext.NAMESPACE + "/models/" + flat;
-        ctx.bedrockPack().file(texturePath + ".png", Textures.png(atlas.image()));
 
         String geometryId = "geometry." + ConversionContext.NAMESPACE + "." + flat;
         ctx.bedrockPack().json("models/entity/" + ConversionContext.NAMESPACE + "/" + flat + ".geo.json",
@@ -227,12 +291,13 @@ public final class ItemConverter {
         for (Map.Entry<String, BasePose> pose : POSES.entrySet()) {
             String context = pose.getKey();
             boolean hand = context.contains("_hand");
-            JsonObject animation = animation(context.equals("furniture") ? furnitureDisplay(model, trident ? thrownDisplay : null)
+            JsonObject animation = animation(context.equals("furniture") ? furnitureDisplay(model, entityDisplay)
                     : display(model, context), pose.getValue());
             if (trident && context.equals("furniture")) {
                 // The only stand that wears a trident is the mirror of a thrown one, pitched like the trident.
                 // Nexo turns its display by rotationYXZ(yaw, -pitch, 0) (the arrow's pitch, positive upwards);
-                // between the stand's yaw and the item that is a turn of -pitch about Bedrock's x.
+                // between the stand's yaw and the item that is a turn of -pitch about Bedrock's x. Only tridents:
+                // on every furniture pose this query broke all furniture in game (stands of pitch 0).
                 JsonArray pitch = new JsonArray();
                 pitch.add("-q.body_x_rotation");
                 pitch.add(0);
@@ -369,15 +434,38 @@ public final class ItemConverter {
     }
 
     /**
-     * Display of the furniture pose: the content plugin's display context of a thrown trident when known
+     * Display of the furniture pose: the display context the entity showing the item uses when known
      * ({@code none}: no transform), else the {@code fixed} one item displays use, unless turned off.
      */
-    private JsonObject furnitureDisplay(JavaModel model, String thrownDisplay) {
-        if (thrownDisplay != null) {
-            JsonObject display = model.display().get(thrownDisplay);
+    private JsonObject furnitureDisplay(JavaModel model, String entityDisplay) {
+        if (entityDisplay != null) {
+            JsonObject display = model.display().get(entityDisplay);
             return display == null ? new JsonObject() : display;
         }
         return "none".equals(ctx.options().furnitureDisplay()) ? new JsonObject() : display(model, "furniture");
+    }
+
+    /**
+     * Bedrock's own texture for a flat model drawn with a vanilla item or block texture
+     * ({@code minecraft:item/painting} is {@code textures/items/painting} on Bedrock), or null. Most names match;
+     * a name Bedrock does not have shows Bedrock's missing texture, as the placeholder would.
+     */
+    static String vanillaIcon(JavaModel model) {
+        String texture = model == null || !model.flat() ? null : model.primaryTexture();
+        if (texture == null) {
+            return null;
+        }
+        ResourceId id = ResourceId.parse(texture);
+        if (!id.namespace().equals("minecraft")) {
+            return null;
+        }
+        if (id.path().startsWith("item/")) {
+            return "textures/items/" + id.path().substring(5);
+        }
+        if (id.path().startsWith("block/")) {
+            return "textures/blocks/" + id.path().substring(6);
+        }
+        return null;
     }
 
     private static JsonObject bone(JsonObject animation, String name) {
@@ -406,7 +494,7 @@ public final class ItemConverter {
         JsonObject rootBone = new JsonObject();
         rootBone.add("rotation", Json.array(pose.rotation()));
         rootBone.add("position", Json.array(pose.position()));
-        rootBone.add("scale", Json.array(scale[0] * pose.scale()[0], scale[1] * pose.scale()[1], scale[2] * pose.scale()[2]));
+        rootBone.add("scale", Json.array(pose.scale()));
         bones.add(root, rootBone);
 
         JsonObject x = new JsonObject();
@@ -418,6 +506,10 @@ public final class ItemConverter {
         bones.add(root + "_y", y);
         JsonObject z = new JsonObject();
         z.add("rotation", Json.array(0, 0, rotation[2]));
+        // Java applies a display as translate, rotate, scale: the scale must not stretch the translation, so it
+        // sits on the innermost bone, not on the root (a painting's fixed display, scale 2 and z -18, floated
+        // 9 px off the wall).
+        z.add("scale", Json.array(scale));
         bones.add(root + "_z", z);
 
         JsonObject animation = new JsonObject();

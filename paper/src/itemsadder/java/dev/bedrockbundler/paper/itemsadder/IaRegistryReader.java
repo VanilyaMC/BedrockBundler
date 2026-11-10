@@ -14,6 +14,7 @@ import org.bukkit.inventory.ItemStack;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -49,10 +50,38 @@ final class IaRegistryReader {
         return items;
     }
 
-    private static IaItem item(String id, CustomStack stack) {
+    private IaItem item(String id, CustomStack stack) {
         ItemStack item = stack.getItemStack();
-        return ItemSnapshots.item(id, item, ChatColor.stripColor(stack.getDisplayName()),
-                stack.isBlock(), CustomStack.isFurniture(item));
+        boolean furniture = CustomStack.isFurniture(item);
+        return ItemSnapshots.item(id, item, ChatColor.stripColor(stack.getDisplayName()), stack.isBlock(), furniture)
+                .withEntityDisplay(furniture ? displayTransform(id, stack) : null);
+    }
+
+    /**
+     * Java display context the furniture's item display draws with ({@code behaviours.furniture
+     * .display_transformation.transform}, e.g. HEAD), or null when not set. Variants ({@code variant_of}) inherit
+     * it from their template.
+     */
+    private String displayTransform(String id, CustomStack stack) {
+        try {
+            ConfigurationSection section = stack.getConfigSectionCopy();
+            String transform = transform(section);
+            String template = section == null ? null : section.getString("variant_of");
+            if (transform == null && template != null) {
+                if (!template.contains(":")) {
+                    template = id.substring(0, id.indexOf(':') + 1) + template;
+                }
+                transform = transform(CustomStack.getConfigSectionOfTemplateCopy(template));
+            }
+            return transform == null ? null : transform.toLowerCase(Locale.ROOT);
+        } catch (RuntimeException e) {
+            logger.log(Level.FINE, "Could not read the display transformation of " + id, e);
+            return null;
+        }
+    }
+
+    private static String transform(ConfigurationSection section) {
+        return section == null ? null : section.getString("behaviours.furniture.display_transformation.transform");
     }
 
     /** @param skipped receives ids of blocks that are not state-based (entity/furniture blocks) */

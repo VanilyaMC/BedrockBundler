@@ -78,7 +78,7 @@ public final class NexoSource implements ContentSource {
                 }
                 ItemStack stack = builder.build();
                 items.add(ItemSnapshots.item("nexo:" + id, stack, displayName(builder, stack),
-                        NexoBlocks.isCustomBlock(id), NexoFurniture.isFurniture(id)).withThrownDisplay(thrownDisplay(id)));
+                        NexoBlocks.isCustomBlock(id), NexoFurniture.isFurniture(id)).withEntityDisplay(thrownDisplay(id)));
             } catch (RuntimeException | LinkageError e) {
                 plugin.getLogger().log(Level.WARNING, "Could not read Nexo item " + id, e);
             }

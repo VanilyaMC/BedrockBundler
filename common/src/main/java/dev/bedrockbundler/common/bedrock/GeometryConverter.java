@@ -40,10 +40,12 @@ public final class GeometryConverter {
     public static JsonObject item(String identifier, JavaModel model, TextureAtlas atlas) {
         JsonArray cubes = new JsonArray();
         for (JavaModel.Element element : model.elements()) {
-            cubes.add(cube(element, face -> {
-                TextureAtlas.Slot slot = face.texture() == null ? null : atlas.slot(face.texture());
-                return slot == null ? null : new float[]{slot.x(), slot.y(), slot.width() / 16f, slot.height() / 16f};
-            }, null));
+            for (JavaModel.Element part : separateFlatFaces(element)) {
+                cubes.add(cube(part, face -> {
+                    TextureAtlas.Slot slot = face.texture() == null ? null : atlas.slot(face.texture());
+                    return slot == null ? null : new float[]{slot.x(), slot.y(), slot.width() / 16f, slot.height() / 16f};
+                }, null));
+            }
         }
 
         JsonArray bones = new JsonArray();
@@ -65,6 +67,41 @@ public final class GeometryConverter {
         bones.add(bone(ITEM_ROOT + "_y", ITEM_ROOT + "_x", null));
         bones.add(bone(ITEM_ROOT + "_z", ITEM_ROOT + "_y", cubes));
         return geometryFile(identifier, atlas.width(), atlas.height(), bones);
+    }
+
+    /** Java model pixels between the two faces of a flat element once they are pulled apart. */
+    static final float FLAT_FACE_GAP = 0.05f;
+
+    /**
+     * A flat element (zero size on an axis, like a painting's canvas) with faces on both sides. Java culls the
+     * face turned away from the camera; Bedrock's attachable material draws both, at the same depth, so they
+     * flicker (z-fighting). Each of the two faces goes into a cube of its own, moved half a gap outwards, so the
+     * face on the viewer's side is always in front.
+     */
+    static java.util.List<JavaModel.Element> separateFlatFaces(JavaModel.Element element) {
+        String[][] sides = {{"west", "east"}, {"down", "up"}, {"north", "south"}};
+        for (int axis = 0; axis < 3; axis++) {
+            String low = sides[axis][0];
+            String high = sides[axis][1];
+            if (element.to()[axis] != element.from()[axis]
+                    || !element.faces().containsKey(low) || !element.faces().containsKey(high)) {
+                continue;
+            }
+            Map<String, JavaModel.Face> lowFaces = new java.util.LinkedHashMap<>(element.faces());
+            lowFaces.remove(high);
+            float[] lowFrom = element.from().clone();
+            float[] lowTo = element.to().clone();
+            lowFrom[axis] -= FLAT_FACE_GAP / 2;
+            lowTo[axis] -= FLAT_FACE_GAP / 2;
+            float[] highFrom = element.from().clone();
+            float[] highTo = element.to().clone();
+            highFrom[axis] += FLAT_FACE_GAP / 2;
+            highTo[axis] += FLAT_FACE_GAP / 2;
+            return java.util.List.of(
+                    new JavaModel.Element(lowFrom, lowTo, element.rotation(), lowFaces),
+                    new JavaModel.Element(highFrom, highTo, element.rotation(), Map.of(high, element.faces().get(high))));
+        }
+        return java.util.List.of(element);
     }
 
     /**

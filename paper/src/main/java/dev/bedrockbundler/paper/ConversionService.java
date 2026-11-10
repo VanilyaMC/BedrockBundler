@@ -5,8 +5,12 @@ import dev.bedrockbundler.common.convert.Converter;
 import dev.bedrockbundler.common.input.ConversionInput;
 import dev.bedrockbundler.common.input.IaBlock;
 import dev.bedrockbundler.common.input.IaItem;
+import dev.bedrockbundler.common.input.PaintingVariant;
 import dev.bedrockbundler.common.spec.Bundle;
 import dev.bedrockbundler.paper.deploy.Deployer;
+import io.papermc.paper.registry.RegistryAccess;
+import io.papermc.paper.registry.RegistryKey;
+import org.bukkit.Art;
 import org.bukkit.command.CommandSender;
 
 import java.io.IOException;
@@ -97,12 +101,27 @@ final class ConversionService {
         });
     }
 
+    /** Painting variants of the server registry: vanilla ones and custom ones (ItemsAdderAdditions', datapacks). */
+    private List<PaintingVariant> paintings() {
+        List<PaintingVariant> paintings = new ArrayList<>();
+        try {
+            for (Art art : RegistryAccess.registryAccess().getRegistry(RegistryKey.PAINTING_VARIANT)) {
+                paintings.add(new PaintingVariant(art.getKey().toString(), art.assetId().asString(),
+                        art.getBlockWidth(), art.getBlockHeight()));
+            }
+        } catch (RuntimeException | LinkageError e) {
+            plugin.getLogger().log(Level.FINE, "Could not read the painting registry", e);
+        }
+        paintings.sort(java.util.Comparator.comparing(PaintingVariant::id));
+        return paintings;
+    }
+
     /** Must be called on the global (main) thread: the content plugin's registry is read here. */
     void convert(ContentSource source, Map<String, byte[]> javaPack, boolean force, CommandSender sender) {
         List<IaItem> items = source.items();
         List<String> skippedBlocks = new ArrayList<>();
         List<IaBlock> blocks = source.blocks(skippedBlocks);
-        ConversionInput input = new ConversionInput(javaPack, items, blocks);
+        ConversionInput input = new ConversionInput(javaPack, items, blocks, paintings(), source.emotes());
         // Per run: the content plugin's configs (menu titles) can change between reloads.
         ConversionContext.Options options = source.adjust(this.options);
         executor.execute(() -> run(input, options, skippedBlocks, force, sender));

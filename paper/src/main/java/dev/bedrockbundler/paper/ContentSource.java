@@ -35,6 +35,11 @@ public interface ContentSource {
     /** The generated Java resource pack as read from disk, or null when the plugin has not built one yet. */
     Map<String, byte[]> packFromDisk() throws java.io.IOException;
 
+    /** Emote animation files for the converter (ItemsAdder); read on the global (main) thread. */
+    default List<dev.bedrockbundler.common.input.EmoteAnimation> emotes() {
+        return List.of();
+    }
+
     /** Whether this item display is one of the plugin's furniture pieces. Called on the display's own thread. */
     boolean isFurniture(ItemDisplay display);
 

@@ -17,13 +17,14 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** Converts a custom content resource pack plus registry snapshot into a {@link Bundle} and Bedrock pack. */
 public final class Converter {
 
     /** Bump whenever converter output changes, so servers regenerate bundles made by older versions. */
-    public static final int CONVERTER_VERSION = 24;
+    public static final int CONVERTER_VERSION = 39;
 
     public record Result(Bundle bundle, byte[] mcpack, byte[] mappings, byte[] blockMappings, List<String> warnings) {
     }
@@ -33,7 +34,9 @@ public final class Converter {
 
     /** Hash identifying the conversion input; equal hashes produce identical output. */
     public static String hash(ConversionInput input, ConversionContext.Options options) {
-        String extra = CONVERTER_VERSION + "|" + options + "|" + Json.GSON.toJson(input.items()) + "|" + Json.GSON.toJson(input.blocks());
+        String extra = CONVERTER_VERSION + "|" + options + "|" + Json.GSON.toJson(input.items()) + "|" + Json.GSON.toJson(input.blocks())
+                + (input.paintings().isEmpty() ? "" : "|" + Json.GSON.toJson(input.paintings()))
+                + (input.emotes().isEmpty() ? "" : "|" + Json.GSON.toJson(input.emotes()));
         return JavaPack.hash(input.javaPack(), extra);
     }
 
@@ -68,7 +71,7 @@ public final class Converter {
                 }
                 variants.add(new IaItem(item.id() + "_" + suffix, item.material(), variantModel, null,
                         item.displayName(), item.maxStackSize(), item.maxDamage(), item.equipSlot(), item.armorAsset(),
-                        item.protection(), item.food(), item.block(), true));
+                        item.protection(), item.food(), item.block(), true).withEntityDisplay(item.entityDisplay()));
             }
         }
         return variants;
@@ -76,15 +79,23 @@ public final class Converter {
 
     public static Result convert(ConversionInput input, ConversionContext.Options options, String packName) {
         ConversionLog log = new ConversionLog();
-        JavaPack javaPack = new JavaPack(input.javaPack());
+        Map<String, byte[]> files = input.javaPack();
+        List<IaItem> paintings = List.of();
+        Map<String, ItemConverter.ExternalTexture> external = new java.util.HashMap<>();
+        if (!input.paintings().isEmpty()) {
+            files = new java.util.HashMap<>(files);
+            paintings = PaintingConverter.items(input.paintings(), files, log, external);
+        }
+        JavaPack javaPack = new JavaPack(files);
         BedrockPack bedrockPack = new BedrockPack();
         ConversionContext ctx = new ConversionContext(javaPack, new ModelResolver(javaPack, log),
                 new Textures(javaPack, log), bedrockPack, log, options);
 
         List<IaItem> sortedItems = new ArrayList<>(input.items());
         sortedItems.addAll(modelVariants(input.items(), javaPack));
+        sortedItems.addAll(paintings);
         sortedItems.sort(Comparator.comparing(IaItem::id));
-        ItemConverter itemConverter = new ItemConverter(ctx);
+        ItemConverter itemConverter = new ItemConverter(ctx, external);
         List<ItemSpec> items = new ArrayList<>();
         Set<String> bedrockIds = new HashSet<>();
         for (IaItem item : sortedItems) {
@@ -116,6 +127,12 @@ public final class Converter {
             } catch (RuntimeException e) {
                 log.warn("Block " + block.id() + " failed: " + e);
             }
+        }
+
+        try {
+            EmoteConverter.convert(input.emotes(), ctx);
+        } catch (RuntimeException e) {
+            log.warn("Emote conversion failed: " + e);
         }
 
         if (options.fonts()) {

@@ -67,6 +67,15 @@ public final class TextureAtlas {
         return new TextureAtlas(atlas, slots);
     }
 
+    /**
+     * One texture the pack does not carry (a texture of the Bedrock client), as an atlas of exactly its size:
+     * faces get UVs in its pixels, and the image stays blank and is not written.
+     */
+    public static TextureAtlas external(String textureId, int width, int height) {
+        return new TextureAtlas(new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB),
+                Map.of(textureId, new Slot(0, 0, width, height)));
+    }
+
     static BufferedImage placeholder() {
         BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
         for (int y = 0; y < 16; y++) {

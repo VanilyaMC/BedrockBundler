@@ -8,7 +8,7 @@ softdepend: [Nexo, ItemsAdder, Geyser-Spigot, floodgate]
 commands:
   bedrockbundler:
     description: Convert custom content for Bedrock and show status.
-    usage: /<command> <reload [-f]|status>
+    usage: /<command> <reload [-f]|status|animate <animation> [player]>
     aliases: [bb]
     permission: bedrockbundler.admin
 permissions:

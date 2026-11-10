@@ -4,13 +4,20 @@ import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
 import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
+import org.bukkit.block.BlockFace;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.ItemDisplay;
+import org.bukkit.entity.ItemFrame;
+import org.bukkit.entity.Painting;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
+import org.bukkit.entity.ThrowableProjectile;
 import org.bukkit.entity.Trident;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -20,6 +27,8 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import dev.bedrockbundler.common.convert.PaintingConverter;
 import org.bukkit.util.Transformation;
 import org.joml.Vector3f;
 
@@ -50,6 +59,12 @@ final class FurnitureMirror implements Listener {
     private static final long SYNC_TICKS = 10;
     /** Displays get their item a moment after spawning; keep checking new ones this many times. */
     private static final int PENDING_ATTEMPTS = 6;
+    /**
+     * Blocks a stand keeps off the surface its model touches (an item frame's wall, the floor under furniture):
+     * Bedrock lights an entity from the block at its position, and exactly on the surface that can be the solid
+     * block, which draws the model black.
+     */
+    private static final double LIGHT_NUDGE = 0.002;
 
     private final BedrockBundlerPlugin plugin;
     private final BedrockPlayers bedrock;
@@ -91,8 +106,12 @@ final class FurnitureMirror implements Listener {
                         entity.remove();
                     } else if (entity instanceof ItemDisplay display) {
                         track(display);
-                    } else if (entity instanceof Trident trident) {
-                        trackTrident(trident);
+                    } else if (entity instanceof Projectile projectile) {
+                        trackProjectile(projectile);
+                    } else if (entity instanceof ItemFrame frame) {
+                        trackFrame(frame);
+                    } else if (entity instanceof Painting painting) {
+                        trackPainting(painting);
                     }
                 }
             }
@@ -119,14 +138,19 @@ final class FurnitureMirror implements Listener {
     public void onAdd(EntityAddToWorldEvent event) {
         if (event.getEntity() instanceof ItemDisplay display) {
             track(display);
-        } else if (event.getEntity() instanceof Trident trident) {
-            trackTrident(trident);
+        } else if (event.getEntity() instanceof Projectile projectile) {
+            trackProjectile(projectile);
+        } else if (event.getEntity() instanceof ItemFrame frame) {
+            trackFrame(frame);
+        } else if (event.getEntity() instanceof Painting painting) {
+            trackPainting(painting);
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onRemove(EntityRemoveFromWorldEvent event) {
-        if (event.getEntity() instanceof ItemDisplay || event.getEntity() instanceof Trident) {
+        if (event.getEntity() instanceof ItemDisplay || event.getEntity() instanceof Projectile
+                || event.getEntity() instanceof ItemFrame || event.getEntity() instanceof Painting) {
             untrack(event.getEntity().getUniqueId());
         }
     }
@@ -212,45 +236,212 @@ final class FurnitureMirror implements Listener {
     }
 
     /**
-     * Thrown custom tridents. The content plugin draws them with its own (packet) item display, which Bedrock
-     * cannot show, so a stand wearing the trident follows it every tick. Nexo turns that display by the trident's
-     * yaw and pitch (arrow angles: yaw = atan2(vx, vz), pitch positive upwards). The stand faces the same way
-     * (an entity yaw is the negated arrow yaw) and carries the trident's pitch, which the item's attachable reads
-     * ({@code q.body_x_rotation}) to tilt the model; Bedrock does not tilt the stand itself.
+     * Thrown custom items: tridents, and snowballs, eggs, ender pearls and the like (ItemsAdder's Boogie Bomb is a
+     * snowball). Java draws them with the custom model (the content plugin's packet item display for a trident, the
+     * item itself for the others); Bedrock shows the vanilla projectile. A stand wearing the item follows the
+     * projectile every tick, and the vanilla look of a thrown item is hidden from Bedrock players. For a trident,
+     * Nexo turns its display by the trident's yaw and pitch (arrow angles: yaw = atan2(vx, vz), pitch positive
+     * upwards). The stand faces the same way (an entity yaw is the negated arrow yaw) and carries the trident's
+     * pitch, which the item's attachable reads ({@code q.body_x_rotation}) to tilt the model; Bedrock does not
+     * tilt the stand itself.
      */
-    private void trackTrident(Trident trident) {
-        UUID id = trident.getUniqueId();
-        if (!running || tasks.containsKey(id) || !source.isCustomItem(trident.getItemStack())) {
+    private void trackProjectile(Projectile projectile) {
+        ItemStack item = projectile instanceof Trident trident ? trident.getItemStack()
+                : projectile instanceof ThrowableProjectile thrown ? thrown.getItem() : null;
+        UUID id = projectile.getUniqueId();
+        if (!running || tasks.containsKey(id) || !source.isCustomItem(item)) {
             return;
         }
-        ScheduledTask task = trident.getScheduler().runAtFixedRate(plugin, t -> {
-            if (!trident.isValid()) {
+        boolean hide = !(projectile instanceof Trident);
+        if (hide) {
+            hideFromBedrock(projectile); // before the spawn packet goes out on the next tick
+        }
+        ScheduledTask task = projectile.getScheduler().runAtFixedRate(plugin, t -> {
+            if (!projectile.isValid()) {
                 untrack(id);
                 return;
             }
-            Location location = trident.getLocation();
-            Location target = location.clone().add(0, yOffset - 0.5, 0);
+            Location location = projectile.getLocation();
+            Location target = location.clone().add(0, yOffset, 0);
             target.setYaw(-location.getYaw() + yawOffset);
             target.setPitch(location.getPitch());
             ArmorStand mirror = mirrors.get(id);
             if (mirror == null || !mirror.isValid()) {
                 try {
-                    mirror = trident.getWorld().spawn(target, ArmorStand.class, this::configureStand);
+                    mirror = projectile.getWorld().spawn(target, ArmorStand.class, this::configureStand);
                 } catch (RuntimeException e) {
-                    plugin.getLogger().log(Level.FINE, "Could not mirror trident " + id, e);
+                    plugin.getLogger().log(Level.FINE, "Could not mirror projectile " + id, e);
                     return;
                 }
-                mirror.getEquipment().setHelmet(trident.getItemStack());
+                mirror.getEquipment().setHelmet(item);
                 mirrors.put(id, mirror);
             } else if (mirror.getLocation().distanceSquared(target) > 1.0E-6
                     || Math.abs(mirror.getLocation().getYaw() - target.getYaw()) > 0.01f
                     || Math.abs(mirror.getLocation().getPitch() - target.getPitch()) > 0.01f) {
                 mirror.teleportAsync(target);
             }
+            if (hide) {
+                hideFromBedrock(projectile);
+            }
             showToBedrock(mirror);
         }, () -> untrack(id), 1, 1);
         if (task != null && tasks.putIfAbsent(id, task) != null) {
             task.cancel();
+        }
+    }
+
+    /**
+     * Furniture in an invisible item frame (ItemsAdder's {@code entity: item_frame}). Bedrock has no invisible
+     * item frame and draws the item as a flat icon in a visible frame, so the frame is hidden from Bedrock players
+     * and a stand shows the model. Java's ItemFrameRenderer draws the item with its fixed display at half size,
+     * centred on the wall surface (1/32 block behind the frame position) and turned like an item display with the
+     * frame's yaw and pitch; the stand gets scale 0.5 and the frame's yaw. Floor and ceiling frames are drawn
+     * upright (a stand's pitch cannot tilt furniture models), and the item's rotation inside the frame is not
+     * shown.
+     */
+    private void trackFrame(ItemFrame frame) {
+        UUID id = frame.getUniqueId();
+        if (!running || tasks.containsKey(id)) {
+            return;
+        }
+        int[] attempts = {0};
+        ScheduledTask task = frame.getScheduler().runAtFixedRate(plugin, t -> {
+            ItemStack item = frame.getItem();
+            ArmorStand mirror = mirrors.get(id);
+            if (mirror == null && (frame.isVisible() || !source.isCustomItem(item))) {
+                // Frames get their item a moment after spawning.
+                if (++attempts[0] >= PENDING_ATTEMPTS) {
+                    t.cancel();
+                    tasks.remove(id);
+                }
+                return;
+            }
+            if (mirror != null && !mirror.isValid()) {
+                mirrors.remove(id);
+                return; // recreated on the next run
+            }
+            BlockFace facing = frame.getFacing();
+            Location location = frame.getLocation();
+            // Exactly on the wall surface Bedrock may light the stand from the wall block (drawn dark); a hair in
+            // front of it, the light comes from the block the frame hangs in.
+            double depth = 1 / 32.0 - LIGHT_NUDGE;
+            Location target = location.clone().add(-facing.getModX() * depth, -facing.getModY() * depth + yOffset,
+                    -facing.getModZ() * depth);
+            target.setYaw(location.getYaw() + yawOffset);
+            target.setPitch(0);
+            if (mirror == null) {
+                try {
+                    mirror = frame.getWorld().spawn(target, ArmorStand.class, this::configureStand);
+                } catch (RuntimeException e) {
+                    plugin.getLogger().log(Level.FINE, "Could not mirror item frame " + id, e);
+                    return;
+                }
+                AttributeInstance scale = mirror.getAttribute(Attribute.SCALE);
+                if (scale != null) {
+                    scale.setBaseValue(0.5);
+                }
+                mirrors.put(id, mirror);
+            } else if (mirror.getLocation().distanceSquared(target) > 1.0E-6
+                    || Math.abs(mirror.getLocation().getYaw() - target.getYaw()) > 0.01f
+                    || Math.abs(mirror.getLocation().getPitch() - target.getPitch()) > 0.01f) {
+                mirror.teleportAsync(target);
+            }
+            if (!Objects.equals(mirror.getEquipment().getHelmet(), item)) {
+                mirror.getEquipment().setHelmet(item);
+            }
+            hideFromBedrock(frame);
+            showToBedrock(mirror);
+        }, () -> untrack(id), 1, SYNC_TICKS);
+        if (task != null && tasks.putIfAbsent(id, task) != null) {
+            task.cancel();
+        }
+    }
+
+    /**
+     * Paintings. Custom ones (a variant outside the minecraft namespace, e.g. ItemsAdderAdditions'): Bedrock only
+     * has the vanilla motives. Vanilla ones: Geyser moves them half a block off (see PaintingConverter). The
+     * painting is hidden from Bedrock players and a stand wears the item the converter made of it: a board
+     * centred on the painting's position, front outwards when the stand takes the painting's yaw (like an item
+     * frame). Bedrock players cannot break the painting.
+     */
+    private void trackPainting(Painting painting) {
+        UUID id = painting.getUniqueId();
+        if (!running || tasks.containsKey(id)) {
+            return;
+        }
+        if (customPaintingItem(painting) != null) {
+            hideFromBedrock(painting); // before the spawn packet goes out on the next tick
+        }
+        int[] attempts = {0};
+        ScheduledTask task = painting.getScheduler().runAtFixedRate(plugin, t -> {
+            // Plugins may set the custom variant right after spawning a vanilla one (ItemsAdderAdditions does).
+            ItemStack item = customPaintingItem(painting);
+            ArmorStand mirror = mirrors.get(id);
+            if (item == null) {
+                if (mirror == null && ++attempts[0] >= PENDING_ATTEMPTS) {
+                    t.cancel();
+                    tasks.remove(id);
+                }
+                return;
+            }
+            Location location = painting.getLocation();
+            Location target = location.clone().add(0, yOffset, 0);
+            target.setYaw(location.getYaw() + yawOffset);
+            target.setPitch(0);
+            if (mirror == null || !mirror.isValid()) {
+                try {
+                    mirror = painting.getWorld().spawn(target, ArmorStand.class, this::configureStand);
+                } catch (RuntimeException e) {
+                    plugin.getLogger().log(Level.FINE, "Could not mirror painting " + id, e);
+                    return;
+                }
+                mirrors.put(id, mirror);
+            } else if (mirror.getLocation().distanceSquared(target) > 1.0E-6
+                    || Math.abs(mirror.getLocation().getYaw() - target.getYaw()) > 0.01f) {
+                mirror.teleportAsync(target);
+            }
+            if (!Objects.equals(mirror.getEquipment().getHelmet(), item)) {
+                mirror.getEquipment().setHelmet(item);
+            }
+            hideFromBedrock(painting);
+            showToBedrock(mirror);
+        }, () -> untrack(id), 1, SYNC_TICKS);
+        if (task != null && tasks.putIfAbsent(id, task) != null) {
+            task.cancel();
+        }
+    }
+
+    /** The item a stand wears for a painting (see PaintingConverter), or null when Geyser draws it. */
+    private static ItemStack customPaintingItem(Painting painting) {
+        String variant;
+        try {
+            variant = painting.getArt().getKey().toString();
+        } catch (RuntimeException e) {
+            return null;
+        }
+        NamespacedKey model = PaintingConverter.mirrored(variant)
+                ? NamespacedKey.fromString(PaintingConverter.itemModel(variant)) : null;
+        if (model == null) {
+            return null;
+        }
+        ItemStack item = new ItemStack(Material.PAPER);
+        ItemMeta meta = item.getItemMeta();
+        meta.setItemModel(model);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    /** Hides an entity from the Bedrock players this thread owns (see {@link #showToBedrock}). */
+    private void hideFromBedrock(Entity entity) {
+        for (Player player : bedrockPlayers.values()) {
+            try {
+                if (plugin.getServer().isOwnedByCurrentRegion(player) && player.isOnline()
+                        && player.getWorld().equals(entity.getWorld()) && player.canSee(entity)) {
+                    player.hideEntity(plugin, entity);
+                }
+            } catch (RuntimeException e) {
+                plugin.getLogger().log(Level.FINE, "Could not hide an entity from " + player.getName(), e);
+            }
         }
     }
 
@@ -316,8 +507,9 @@ final class FurnitureMirror implements Listener {
     }
 
     /**
-     * Where the stand's feet go: the furniture pose draws the model centre half a block (times the stand's
-     * scale) above the feet, and an item_display draws it at its position plus the transformation translation.
+     * Where the stand's feet go: the furniture pose draws the model centre at the feet, and an item_display draws
+     * it at its position plus the transformation translation. Bedrock lights the stand from the block at its feet,
+     * so that is the block Java lights the display from.
      */
     private Location target(ItemDisplay display) {
         Location location = display.getLocation();
@@ -326,9 +518,9 @@ final class FurnitureMirror implements Listener {
         Vector3f translation = new Vector3f(transformation.getTranslation())
                 .rotateY((float) Math.toRadians(-location.getYaw()));
         Vector3f angles = transformation.getLeftRotation().getEulerAnglesYXZ(new Vector3f());
-        float scale = transformation.getScale().y();
-
-        Location target = location.clone().add(translation.x(), translation.y() + yOffset - 0.5 * scale, translation.z());
+        // A display exactly on the floor would be lit from the block below; a hair above it is not.
+        Location target = location.clone().add(translation.x(),
+                translation.y() + yOffset + LIGHT_NUDGE, translation.z());
         target.setYaw(location.getYaw() - (float) Math.toDegrees(angles.y()) + yawOffset);
         target.setPitch(0);
         return target;
