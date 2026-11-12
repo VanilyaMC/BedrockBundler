@@ -222,12 +222,14 @@ final class FurnitureMirror implements Listener {
     }
 
     private void removeMirror(ArmorStand mirror) {
-        if (!Scheduling.isFolia() || plugin.getServer().isOwnedByCurrentRegion(mirror)) {
+        if (!Scheduling.isFolia()) {
             mirror.remove();
             return;
         }
-        // The stand sits in another region; remove it on its own thread. While the plugin is disabling no task
-        // can be scheduled any more; the stand is not persistent, so it is gone with its chunk.
+        // On Folia always one tick later on the stand's own thread: when the furniture leaves the world because its
+        // chunk unloads, removing the stand right away is refused ("prevented from being removed ... processing
+        // section status updates"). A stand that unloaded meanwhile is not persistent and is gone with its chunk.
+        // While the plugin is disabling no task can be scheduled any more; the stand goes with its chunk.
         try {
             mirror.getScheduler().execute(plugin, mirror::remove, null, 1L);
         } catch (RuntimeException ignored) {
