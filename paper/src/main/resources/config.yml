@@ -51,3 +51,13 @@ sync:
     port: 8765
     # Shared secret for the extension. Generated on first start.
     token: ""
+
+models:
+  # Show BetterModel 3D models (pets, NPC figures, mobs with models, crate models) to Bedrock players. The .bbmodel
+  # files are converted together with the Nexo pack; Geyser needs a restart after they change. Kill switch: set false
+  # and restart the server, Bedrock players then see no models (and no stand entities).
+  enabled: true
+  # Folder with the .bbmodel files, relative to the plugins folder.
+  directory: "BetterModel/models"
+  # Models farther than this (blocks) from a Bedrock player are not sent to them.
+  view-range: 48

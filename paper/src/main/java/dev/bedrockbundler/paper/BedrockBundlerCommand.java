@@ -44,6 +44,9 @@ final class BedrockBundlerCommand implements TabExecutor {
                     status.converted() ? "" : " (unchanged)"));
             sender.sendMessage("[BedrockBundler] Bundle hash: " + status.hash().substring(0, 12));
         }
+        if (plugin.modelCount() >= 0) {
+            sender.sendMessage("[BedrockBundler] Bedrock models mirrored now: " + plugin.modelCount());
+        }
         if (service.restartRequired()) {
             sender.sendMessage("[BedrockBundler] Geyser is running an older bundle; restart it to apply the new one.");
         }

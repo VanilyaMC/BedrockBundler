@@ -1,16 +1,20 @@
 [versions]
 paper = "1.21.4-R0.1-SNAPSHOT"
-geyser = "2.11.0-SNAPSHOT"
+geyser = "2.12.0-SNAPSHOT"
 floodgate = "2.2.5-SNAPSHOT"
 gson = "2.11.0"
 snakeyaml = "2.3"
 nexo = "1.29.1"
+bettermodel = "3.6.0"
 junit = "5.11.4"
 shadow = "9.3.1"
 
 [libraries]
 paper-api = { module = "io.papermc.paper:paper-api", version.ref = "paper" }
 geyser-api = { module = "org.geysermc.geyser:api", version.ref = "geyser" }
+geyser-core = { module = "org.geysermc.geyser:core", version.ref = "geyser" }
+bettermodel-api = { module = "io.github.toxicity188:bettermodel-api", version.ref = "bettermodel" }
+bettermodel-bukkit-api = { module = "io.github.toxicity188:bettermodel-bukkit-api", version.ref = "bettermodel" }
 floodgate-api = { module = "org.geysermc.floodgate:api", version.ref = "floodgate" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }

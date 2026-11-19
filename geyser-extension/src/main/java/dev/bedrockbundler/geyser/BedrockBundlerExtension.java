@@ -87,7 +87,24 @@ public final class BedrockBundlerExtension implements Extension {
             bundle = null;
         } else {
             logger().info("Loaded BedrockBundler bundle " + bundle.hash().substring(0, 12) + ": "
-                    + bundle.items().size() + " items, " + bundle.blocks().size() + " blocks");
+                    + bundle.items().size() + " items, " + bundle.blocks().size() + " blocks, "
+                    + bundle.models().size() + " entity models");
+            startModels();
+        }
+    }
+
+    /** Entity models need the public custom entity API of Geyser 2.12+; older Geysers just skip them. */
+    private void startModels() {
+        if (bundle.models().isEmpty()) {
+            return;
+        }
+        try {
+            Class.forName("org.geysermc.geyser.api.event.lifecycle.GeyserDefineEntitiesEvent");
+            ModelSupport support = new ModelSupport(logger(), bundle);
+            eventBus().register(support);
+        } catch (ClassNotFoundException | LinkageError e) {
+            logger().warning("This Geyser has no custom entity API (needs 2.12 or newer): "
+                    + bundle.models().size() + " entity models are not registered.");
         }
     }
 

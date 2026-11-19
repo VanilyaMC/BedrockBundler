@@ -20,6 +20,12 @@ sourceSets {
     }
 }
 
+// The BetterModel API is compiled for Java 25, so the hook that uses it is its own source set built with release 25.
+// It is only loaded (by name) on servers that run BetterModel, which needs Java 25 itself. A build on an older JDK
+// leaves the hook out; the plugin then just shows no BetterModel models to Bedrock players.
+val withBetterModel = JavaVersion.current().majorVersion.toInt() >= 25
+val betterModel: SourceSet = sourceSets.create("bettermodel")
+
 dependencies {
     implementation(project(":common"))
     compileOnly(libs.paper.api)
@@ -27,6 +33,17 @@ dependencies {
     compileOnly(libs.geyser.api)
     compileOnly(libs.nexo) { isTransitive = false }
     compileOnly(itemsAdderJars)
+
+    "bettermodelCompileOnly"(sourceSets.main.get().output)
+    "bettermodelCompileOnly"(project(":common"))
+    "bettermodelCompileOnly"(libs.paper.api)
+    "bettermodelCompileOnly"(libs.bettermodel.api)
+    "bettermodelCompileOnly"(libs.bettermodel.bukkit.api)
+}
+
+tasks.named<JavaCompile>("compileBettermodelJava") {
+    options.release.set(25)
+    enabled = withBetterModel
 }
 
 tasks.processResources {
@@ -43,6 +60,9 @@ tasks.processResources {
 }
 
 tasks.shadowJar {
+    if (withBetterModel) {
+        from(betterModel.output)
+    }
     archiveBaseName.set("BedrockBundler")
     archiveClassifier.set("")
 }
