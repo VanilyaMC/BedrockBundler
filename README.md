@@ -6,8 +6,9 @@
 > **BedrockBundler is in beta.** It works on the setups it was tested on, but expect bugs and breaking changes
 > between versions. Back up your server before trying it, and please report problems.
 
-Makes [Nexo](https://nexomc.com/) and [ItemsAdder](https://itemsadder.devs.beer/) content visible to Bedrock
-players who join through [Geyser](https://geysermc.org/).
+Makes [Nexo](https://nexomc.com/) and [ItemsAdder](https://itemsadder.devs.beer/) content, and
+[BetterModel](https://github.com/toxicity188/BetterModel) 3D models, visible to Bedrock players who join through
+[Geyser](https://geysermc.org/).
 
 Nexo and ItemsAdder only draw their content with a Java resource pack, so Bedrock players normally see plain paper,
 note blocks and missing furniture. BedrockBundler reads the pack the plugin generates and converts it **on your
@@ -26,7 +27,7 @@ server**: there is no external conversion service and no manual pack work.
 2. The result is a *bundle*: a Bedrock resource pack (`.mcpack`) plus custom item and block definitions.
 3. The BedrockBundler **Geyser extension** registers the items, blocks and pack when Geyser starts. On a
    Geyser-Spigot server the extension installs itself.
-4. While the server runs, BedrockBundler shows furniture (item displays) to Bedrock players.
+4. While the server runs, BedrockBundler shows furniture (item displays) and BetterModel models to Bedrock players.
 
 Geyser only loads custom content when it starts, so **restart after each conversion**.
 
@@ -44,6 +45,16 @@ Geyser only loads custom content when it starts, so **restart after each convers
 - [x] Tridents: Java's charge pose in first and third person; thrown custom tridents keep their flight angle
 - [x] Food, max stack size, durability and equippable item properties
 - [x] Furniture (`item_display`): position, rotation and scale follow the Java entity
+- [x] Item displays of custom items that are not furniture (dungeon chests, backpacks), shown to Bedrock players
+- [x] Item frames and glow item frames with a custom item: the 3D model instead of the flat icon (wall frames)
+- [x] Optional mirrors for block displays (approximate) and text displays (Geyser already draws text displays)
+- [x] BetterModel models (pets, NPC figures, mobs with models, crate models, fish): the `.bbmodel` files are
+  converted with the Nexo pack, and the models are drawn as Bedrock custom entities with their animations and bone
+  visibility (Geyser 2.12+). *Not yet seen on a real Bedrock client.*
+- [x] Dyed items: `minecraft:dye` tinted item models are dyeable on Bedrock (icon, worn armor, and 3D models worn or on
+  furniture stands); constant and default tints are baked into the textures (Geyser 2.12+)
+- [x] Leather-style armor: equipment layers with `dyeable` follow the item's dye colour
+- [x] Nexo furniture dye is applied to the furniture shown to Bedrock players (unverified on a real Bedrock client)
 - [x] Font images (emojis, chat icons), sized by their Java `height`/`ascent`
 - [x] Positive font offsets (shift characters keep their width)
 - [x] GUI backgrounds (textured inventories such as `/ia`) on the classic chest screen
@@ -60,9 +71,7 @@ Geyser only loads custom content when it starts, so **restart after each convers
 - [ ] Custom sounds
 - [ ] ItemsAdder custom entities (mobs)
 - [ ] GUI backgrounds on the pocket (touch) UI layout
-- [ ] Furniture types other than `item_display` (armor stands, item frames)
-- [ ] Dyeable items and furniture colors
-- [ ] Legacy shader armor (leather armor with shaders)
+- [ ] Legacy shader armor (leather armor with shaders): needs a dye value to texture mapping, not generic tinting
 - [ ] Plugin-message sync for proxies (no shared folder or open HTTP port needed)
 - [ ] In-game command to tune 3D held-item positions
 
@@ -70,11 +79,28 @@ Geyser only loads custom content when it starts, so **restart after each convers
 
 - Negative font offsets, so HUDs that are aligned with them do not look like on Java. Bedrock text cannot move backwards.
 - Glyphs taller than a text line inside chat or titles. Bedrock draws every glyph at text size; GUI backgrounds are handled separately.
+- Dye colours on 3D models held in a hand: Bedrock only gives an attachable an item's colour through the wearer's
+  armor slots, so a held model shows its undyed colour.
+- Per-face or per-layer dye: the whole icon or model is tinted, including parts Java draws untinted.
+- Tint sources that follow data (biome grass, potions, fireworks, maps, teams): their default colour is used.
 - More than one look for worn elytras. Bedrock players can only glide with the vanilla elytra, so Geyser sends that
   in place of a custom one. BedrockBundler gives the vanilla elytra the look of the first custom elytra; any others
   look the same while worn.
 
 ### Good to know
+
+- Geyser itself draws armor stands, item frames, text displays (as name plates) and interaction entities (click
+  boxes), so BedrockBundler does not mirror those by default. It has no Bedrock entity for item displays and block
+  displays; those are what the mirrors cover.
+- Models (BetterModel): the plugin keeps one hidden marker armor stand per model, shown only to Bedrock players near it.
+  A plugin message (`bedrockbundler:main`) tells the Geyser extension which converted model the stand stands for and
+  carries the bone and animation bits, which the model's animation controllers read as entity properties. The stand is
+  a real server entity (it ticks); a few hundred in loaded chunks cost little. If the extension does not know the
+  model (a bundle made after Geyser started, an old Geyser, a failed channel) the player sees a tiny stand, never a
+  wrong model. The BetterModel hook is compiled for Java 25 because the BetterModel API is; a build on an older JDK
+  leaves it out. Switch off with `models.enabled: false` and a restart.
+- Geyser must be restarted after the models change, like for items: the extension compares the bundle hash the plugin
+  sends with its own and ignores models of a different bundle.
 
 - Bedrock only draws armor on horses and llamas whose client entity allows it. When the pack contains armor for
   them, it replaces the vanilla horse, llama and trader llama client entities with copies that do (taken from
@@ -99,7 +125,7 @@ documentation does not say; `—` means the row does not apply.
 | Font images / emojis | ✅ | ✅ | ❌ | ❌ | ❌ |
 | GUI backgrounds | ✅ (classic UI) | ✅ | ❌ | ✅ | ❌ |
 | Sounds | ❌ (planned) | ✅ | ❌ | ❌ | ❌ |
-| Custom mobs / ModelEngine | ❌ (planned) | ✅ (with extension) | ❌ | ❌ | ❌ |
+| Custom mobs / models | ✅ (BetterModel) | ✅ (with extension) | ❌ | ❌ | ❌ |
 | Proxy / standalone Geyser | ✅ (folder, HTTP) | ✅ (plugin message, folder) | — | — | — |
 | Cost | Free | Sold on [nexomc.com](https://nexomc.com/products/scaffolding) | Free | Free | — |
 | Status | Beta | Early access | — | — | — |
@@ -112,7 +138,8 @@ documentation does not say; `—` means the row does not apply.
 | Java | 21+ |
 | ItemsAdder | 4.0.x (tested with 4.0.18), or |
 | Nexo | 1.29+ (built against the 1.29.1 API, read against 1.30-dev) |
-| Geyser | 2.11.0+ (tested with 2.12.0) |
+| Geyser | 2.11.0+ for items, blocks and furniture; 2.12+ (custom entity API) for entity models and dyed items (tested with 2.12.1) |
+| BetterModel | 3.6+ (optional; needs Java 25, like BetterModel itself) |
 | Floodgate | Recommended; required for furniture when Geyser runs on a proxy |
 
 Tested on Leaf 1.21.11 with Geyser-Spigot 2.12, Floodgate and ViaVersion, and on Paper 26.2.
@@ -185,6 +212,10 @@ Geyser without the BedrockBundler extension. With both, Geyser registers every i
 | `furniture.enabled` | `true` | Show furniture to Bedrock players |
 | `furniture.yaw-offset` / `y-offset` | `0` | Fine-tuning if furniture looks turned or shifted |
 | `sync.type` | `AUTO` | `AUTO`, `LOCAL`, `FOLDER`, `HTTP` or `OFF` |
+| `models.enabled` | `true` | Convert BetterModel models and show them to Bedrock players (kill switch: `false`, restart) |
+| `models.directory` | `BetterModel/models` | Folder of the `.bbmodel` files, relative to `plugins/` |
+| `models.view-range` | `48` | Models farther than this from a Bedrock player are not sent to them |
+| `displays.*` | see file | Mirrors for item displays, item frames, block displays and text displays (`displays.enabled`, `displays.max-mirrors`, ...) |
 
 ## Commands
 
@@ -218,6 +249,10 @@ This builds three jars:
 | `geyser-extension` | Geyser extension: registers items, blocks and the pack |
 | `cli` | Offline converter for a Nexo folder |
 
+## Offline converter and models
+
+`--models <folder with .bbmodel files>` makes the offline converter convert BetterModel models too.
+
 ## License
 
 BedrockBundler is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only).
@@ -239,4 +274,8 @@ and are not covered by this license.
 
 - The title-glyph test that shows GUI backgrounds on Bedrock follows
   [Chest-GUI-Generator](https://github.com/wlsgunzz/Chest-GUI-Generator).
-- [GeyserMC](https://geysermc.org/) for the custom item, block and resource pack APIs.
+- [GeyserMC](https://geysermc.org/) for the custom item, block, entity and resource pack APIs.
+- The BetterModel to Bedrock model pipeline (Blockbench model reading, geometry, animation, render controller and
+  property layout) is ported from [GeyserModelEngine](https://github.com/GeyserExtensionists/GeyserModelEngine) by
+  zimzaza4 and contributors (MIT). The copyright notice and licence text are in
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
