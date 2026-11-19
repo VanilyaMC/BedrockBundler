@@ -3,18 +3,26 @@
 BedrockBundler itself is licensed under AGPL-3.0-only (see `LICENSE`). Parts of the BetterModel (`.bbmodel`)
 conversion in `common/src/main/java/dev/bedrockbundler/common/model/` are derived from the following works.
 
-## GeyserModelEngine
+## GeyserModelEngine and GeyserUtils
 
 The resource pack generator for custom entities (`ModelPackGenerator`, `ShortHash`, the material template and the
 bone/animation/tint property scheme) is ported from the Geyser extension of
 [GeyserModelEngine](https://github.com/GeyserExtensionists/GeyserModelEngine) (classes `ResourcePackManager`,
 `Entity`, `Geometry`, `Animation`, `AnimationController`, `RenderController`, `TranslucencySplitter`,
-`ManualAnimator`, `Material`, `ShortHashUtil`, `BooleanPacker`), including the changes of the VanilyaMC fork.
-`BbmodelReader` also follows the texture naming rule of its Blockbench packer.
+`ManualAnimator`, `Material`, `ShortHashUtil`, `BooleanPacker`). It was changed for BedrockBundler: it builds
+everything in memory and has no Geyser calls. `BbmodelReader` also follows the texture naming rule of its Blockbench
+packer.
+
+The way the plugin tells the Geyser extension which model an entity has and which animations run (plugin messages
+that the extension turns into entity properties) follows the design of
+[GeyserUtils](https://github.com/GeyserExtensionists/GeyserUtils), the library GeyserModelEngine uses. BedrockBundler
+has its own message format and code (`ModelMessages`, `ModelChannel`, `ModelSupport`).
+
+Both projects are MIT licensed and have the same copyright holder:
 
 MIT License
 
-Copyright (c) 2024 zimzaza4 and GeyserModelEngine contributors
+Copyright (c) 2024 zimzaza4
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
