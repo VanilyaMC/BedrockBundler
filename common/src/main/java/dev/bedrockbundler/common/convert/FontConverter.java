@@ -151,6 +151,11 @@ final class FontConverter {
         if (file == null || rows == null || rows.isEmpty()) {
             return;
         }
+        // A sheet of the vanilla font (minecraft:font/ascii.png, accented.png, nonlatin_european.png...) holds the
+        // ordinary characters Bedrock already draws; packs reuse it in shifted copies of the default font (row
+        // fonts of glyph menus). Writing those would replace whole Bedrock glyph pages (box drawing, small caps,
+        // symbols) and blank their other characters, so only private-use characters are taken from such a sheet.
+        boolean vanillaSheet = vanillaFontSheet(file);
 
         List<int[]> codePointRows = new ArrayList<>();
         int columns = 0;
@@ -164,7 +169,7 @@ final class FontConverter {
         if (height <= 0 || ascent <= OFFSET_ASCENT) {
             for (int[] codePoints : codePointRows) {
                 for (int codePoint : codePoints) {
-                    if (!replaceable(codePoint)) {
+                    if (!replaceable(codePoint) || (vanillaSheet && !privateUse(codePoint))) {
                         continue;
                     }
                     if (height <= 0) {
@@ -193,7 +198,7 @@ final class FontConverter {
         for (int r = 0; r < codePointRows.size(); r++) {
             int[] codePoints = codePointRows.get(r);
             for (int c = 0; c < codePoints.length; c++) {
-                if (replaceable(codePoints[c])) {
+                if (replaceable(codePoints[c]) && !(vanillaSheet && !privateUse(codePoints[c]))) {
                     BufferedImage glyph = sheet.getSubimage(c * cellWidth, r * cellHeight, cellWidth, cellHeight);
                     add(pages, new Glyph(codePoints[c], glyph, height, ascent, 0));
                 }
@@ -218,6 +223,12 @@ final class FontConverter {
             }
             add(pages, new Glyph(codePoint, null, 0, 0, Math.max(0, advance)));
         }
+    }
+
+    /** {@code minecraft:font/...} or {@code font/...}: a sheet of the vanilla font, not a pack's own icons. */
+    static boolean vanillaFontSheet(String file) {
+        ResourceId id = ResourceId.parse(file);
+        return id.namespace().equals("minecraft") && id.path().startsWith("font/");
     }
 
     private static boolean privateUse(int codePoint) {
