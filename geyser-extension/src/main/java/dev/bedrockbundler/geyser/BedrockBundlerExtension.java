@@ -174,7 +174,7 @@ public final class BedrockBundlerExtension implements Extension {
     private static final class Dyeable {
 
         static void apply(CustomItemBedrockOptions.Builder options, ItemSpec spec) {
-            options.dyeable(0xFFFFFF);
+            options.dyeable(spec.dyeColor() == null ? 0xFFFFFF : spec.dyeColor());
             options.icons(org.geysermc.geyser.api.item.custom.v2.CustomItemIcons.builder()
                     .defaultIcon(spec.icon()).dyedIcon(spec.dyedIcon()).build());
         }
@@ -190,8 +190,8 @@ public final class BedrockBundlerExtension implements Extension {
             options.protectionValue(spec.protection());
         }
         if (dyeable && spec.dyedIcon() != null) {
-            // Marks the item dyeable on Bedrock, white by default so an undyed item keeps its texture; Geyser sends
-            // the Java dyed_color as the item's customColor, and the client tints the dyed (grayscale) icon with it.
+            // Marks the item dyeable on Bedrock, with the undyed colour of the Java model; Geyser sends the Java
+            // dyed_color as the item's customColor, and the client tints the dyed (grayscale) icon with it.
             Dyeable.apply(options, spec);
         }
         if (spec.tags() != null) {
