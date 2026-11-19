@@ -167,6 +167,12 @@ public final class Converter {
         if (!input.models().isEmpty()) {
             try {
                 models = ModelConverter.convert(input.models(), bedrockPack, log);
+                for (ModelSpec spec : models) {
+                    // A model that needs more than 32 entity properties (Bedrock's limit) cannot be driven.
+                    if (spec.properties().size() > 32) {
+                        log.warn("model " + spec.id() + " needs " + spec.properties().size() + " entity properties; Bedrock allows 32");
+                    }
+                }
             } catch (RuntimeException e) {
                 log.warn("Model conversion failed: " + e);
             }

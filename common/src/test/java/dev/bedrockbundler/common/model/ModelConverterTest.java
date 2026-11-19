@@ -369,10 +369,11 @@ class ModelConverterTest {
 
     @Test
     void tooManyPropertiesRejectsTheModelAndTintsFallBack() {
-        // 400 bones: 2 * 17 + 1 properties > 32
-        assertEquals(0, run(input("huge", manyBones(400, false))).specs.size());
-        // 320 bones with a root bone: bone masks alone fit, bone masks + tint masks do not
-        Run run = run(input("big", manyBones(320, true)));
+        int bits = ModelSpec.BITS_PER_PROPERTY;
+        // far too many bones: two masks per 'bits' bones plus the animation words exceed 32
+        assertEquals(0, run(input("huge", manyBones(bits * 17, false))).specs.size());
+        // 14 words of bones with a root bone: bone masks alone fit, bone masks + tint masks do not
+        Run run = run(input("big", manyBones(bits * 13 + 1, true)));
         assertEquals(1, run.specs.size());
         assertTrue(run.log.warnings().stream().anyMatch(w -> w.contains("tints disabled")));
         assertFalse(run.specs.get(0).properties().stream().anyMatch(p -> p.name().contains("tint")));

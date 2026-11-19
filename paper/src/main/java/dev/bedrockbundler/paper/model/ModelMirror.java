@@ -327,7 +327,7 @@ public final class ModelMirror implements Listener {
         }
     }
 
-    /** Packs bone and animation flags into the 24-bit integers the entity properties hold. */
+    /** Packs bone and animation flags into the 19-bit integers the entity properties hold. */
     static List<ModelMessages.Value> values(ModelSpec spec, Set<String> hiddenBones, Set<String> animations) {
         List<ModelMessages.Value> values = new ArrayList<>();
         pack(values, ModelMessages.BONE, spec.bones(), hiddenBones, ModelSpec::boneKey);

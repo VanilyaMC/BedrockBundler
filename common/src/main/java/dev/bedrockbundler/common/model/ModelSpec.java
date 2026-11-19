@@ -27,8 +27,13 @@ public record ModelSpec(String id, String entity, List<String> bones, List<Strin
 
     public static final String NAMESPACE = "bedrockbundler";
 
-    /** Bits used per int property; values stay below {@code 1 << BITS_PER_PROPERTY}. */
-    public static final int BITS_PER_PROPERTY = 24;
+    /**
+     * Bits used per int property; values stay below {@code 1 << BITS_PER_PROPERTY}. GeyserModelEngine packs 24 bits,
+     * but Geyser warns about int properties beyond +-1,000,000, a range that is not known to be safe on the client.
+     * 19 bits (524,287) stay inside it; no model of ours needs more than one property per kind, and a model needs
+     * 19 more bones or animations per extra property.
+     */
+    public static final int BITS_PER_PROPERTY = 19;
 
     /** Default hitbox edge: tiny so clicks and hits reach the real mob underneath the model. */
     public static final float DEFAULT_HITBOX = 0.02f;
