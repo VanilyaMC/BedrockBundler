@@ -79,9 +79,10 @@ final class ArmorConverter {
     /**
      * A worn layer Bedrock can dye (Java: an equipment layer with {@code dyeable}).
      *
-     * @param slot armor slot index {@code query.armor_color_slot} takes (0 head, 1 chest, 2 legs, 3 feet)
+     * @param slot  armor slot index {@code query.armor_color_slot} takes (0 head, 1 chest, 2 legs, 3 feet)
+     * @param color RGB colour of the undyed layer ({@code color_when_undyed})
      */
-    record Dyed(int slot) {
+    record Dyed(int slot, int color) {
     }
 
     /** Shared controller for player armor and wings: {@code controller.render.armor} on the worn keys. */
@@ -206,7 +207,7 @@ final class ArmorConverter {
                 materials.addProperty("armor_dyed", DyeSupport.DYED_MATERIAL);
                 textures.addProperty("armor_dyed", bedrockTexture + "_dyed.tga");
                 controller = DyeSupport.ARMOR_CONTROLLER;
-                dyed = new Dyed(SLOT_INDEX.get(equipSlot));
+                dyed = new Dyed(SLOT_INDEX.get(equipSlot), undyed);
                 DyeSupport.writeControllers(ctx);
             }
         }

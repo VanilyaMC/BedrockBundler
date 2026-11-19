@@ -147,6 +147,9 @@ public final class ItemConverter {
         List<DyeSupport.Tint> tints = DyeSupport.parse(
                 ctx.models().modelNode(item.itemModel(), item.material(), item.customModelData()), ctx.log(), item.id());
         boolean wornDyed = worn != null && worn.dyed() != null;
+        int wornColor = wornDyed ? worn.dyed().color() : 0xFFFFFF;
+        // The colour of the undyed item: that of the first dye tint, else of the dyeable armor layer.
+        int dyeColor = tints.stream().filter(t -> t.kind() == DyeSupport.Kind.DYE).mapToInt(DyeSupport.Tint::rgb).findFirst().orElse(0xFFFFFF);
         BufferedImage dyedIcon = null;
         boolean handheld = false;
         BufferedImage iconImage;
@@ -179,6 +182,9 @@ public final class ItemConverter {
                 // the way Java builds item/generated ones.
                 attachable(bedrockId, flat, GeneratedItemModel.of(model, iconImage, GeneratedItemModel.TEXTURE),
                         null, item, worn, Map.of(GeneratedItemModel.TEXTURE, iconImage), null);
+                if (DyeSupport.hasDye(tints)) {
+                    warnHeld(item);
+                }
                 worn = null;
             }
         } else {
@@ -211,6 +217,7 @@ public final class ItemConverter {
         }
         if (wornDyed && dyedIcon == null && iconImage != null) {
             dyedIcon = DyeSupport.gray(iconImage); // a dyeable armor layer, but the item model has no dye tint
+            dyeColor = wornColor;
         }
         if (dyedIcon != null) {
             // Bedrock tints this grayscale icon with the item's colour; the default icon shows the undyed look.
@@ -238,7 +245,17 @@ public final class ItemConverter {
                 item.protection(),
                 food,
                 tags,
-                dyedIcon == null ? null : icon + "_dyed");
+                dyedIcon == null ? null : icon + "_dyed",
+                dyedIcon == null ? null : dyeColor);
+    }
+
+    /**
+     * Bedrock gives an attachable an item's dye colour only through the wearer's armor slots, so a dye tinted
+     * model drawn by an attachable looks undyed in a hand (and in any slot of an entity without armor slots).
+     */
+    private void warnHeld(IaItem item) {
+        ctx.log().warn("Item " + item.id() + ": Bedrock cannot read an item's dye colour while it is held in a hand; "
+                + "the held model keeps the undyed colour (the icon and worn armor follow the dye)");
     }
 
     /**
@@ -286,6 +303,9 @@ public final class ItemConverter {
                             ArmorConverter.Worn worn, Map<String, BufferedImage> preloaded, DyeSupport.Plan dye) {
         boolean itemDyed = dye != null && dye.dyed() != null;
         boolean wornDyed = worn != null && worn.dyed() != null;
+        if (itemDyed) {
+            warnHeld(item);
+        }
         Function<String, BufferedImage> loader = DyeSupport.loader(ctx.textures()::load);
         boolean shield = item.material().equals("minecraft:shield");
         boolean trident = item.material().equals("minecraft:trident");

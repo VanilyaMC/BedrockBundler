@@ -177,6 +177,7 @@ class DyeableConverterTest {
     void flatDyeableItemGetsGrayscaleDyedIcon() throws IOException {
         ItemSpec cap = spec("test_cap");
         assertEquals("bedrockbundler.test_cap_dyed", cap.dyedIcon());
+        assertEquals(LEATHER, cap.dyeColor());
         assertNull(spec("test_glow").dyedIcon());
 
         // Undyed: the gray base times the leather colour. Dyed icon: plain gray for Bedrock to tint.
@@ -201,6 +202,9 @@ class DyeableConverterTest {
     void dyeable3dItemUsesDyedMaterialAndArmorColorQuery() throws IOException {
         ItemSpec sofa = spec("test_sofa");
         assertEquals("bedrockbundler.test_sofa_dyed", sofa.dyedIcon());
+        assertEquals(0xFFFFFF, sofa.dyeColor());
+        assertTrue(result.warnings().stream().anyMatch(w -> w.contains("test:sofa") && w.contains("held in a hand")),
+                "a dye tinted 3D model looks undyed in a hand: " + result.warnings());
 
         JsonObject description = description("test_sofa");
         assertEquals("1.21.30", attachable("test_sofa").get("format_version").getAsString());
@@ -236,6 +240,7 @@ class DyeableConverterTest {
         ItemSpec armor = spec("test_leathery_chestplate");
         assertEquals("chest", armor.equipSlot());
         assertNotNull(armor.dyedIcon());
+        assertEquals(LEATHER, armor.dyeColor());
 
         JsonObject description = description("test_leathery_chestplate");
         assertEquals("1.21.30", attachable("test_leathery_chestplate").get("format_version").getAsString());
@@ -310,7 +315,7 @@ class DyeableConverterTest {
         JsonObject options = items.getAsJsonArray("minecraft:paper").asList().stream().map(e -> e.getAsJsonObject())
                 .filter(d -> d.get("bedrock_identifier").getAsString().endsWith("test_cap")).findFirst().orElseThrow()
                 .getAsJsonObject("bedrock_options");
-        assertEquals("#FFFFFF", options.getAsJsonObject("dyeable").get("default_color").getAsString());
+        assertEquals("#A06540", options.getAsJsonObject("dyeable").get("default_color").getAsString());
         assertEquals("bedrockbundler.test_cap_dyed", options.getAsJsonObject("icons").get("dyed").getAsString());
         assertFalse(options.has("icon"));
         JsonObject plain = items.getAsJsonArray("minecraft:paper").asList().stream().map(e -> e.getAsJsonObject())
@@ -318,6 +323,20 @@ class DyeableConverterTest {
                 .getAsJsonObject("bedrock_options");
         assertEquals("bedrockbundler.test_glow", plain.get("icon").getAsString());
         assertFalse(plain.has("dyeable"));
+    }
+
+    @Test
+    void bundlesWithoutDyeFieldsStillRead() {
+        ItemSpec old = Json.GSON.fromJson("""
+                {"javaItem": "minecraft:paper", "model": "test:x", "bedrockId": "bedrockbundler:x", "icon": "bedrockbundler.x",
+                 "creativeCategory": "items", "protection": 0}""", ItemSpec.class);
+        assertNull(old.dyedIcon());
+        assertNull(old.dyeColor());
+        assertEquals("minecraft:paper", old.javaItem());
+        // The constructor of the format before dyeable items.
+        ItemSpec plain = new ItemSpec("minecraft:paper", "test:x", null, "bedrockbundler:x", "X", "bedrockbundler.x", false,
+                "items", null, null, null, 0, null, List.of());
+        assertNull(plain.dyedIcon());
     }
 
     @Test

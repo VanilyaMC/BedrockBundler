@@ -40,7 +40,8 @@ public final class MappingWriter {
                 icons.addProperty("dyed", item.dyedIcon());
                 options.add("icons", icons);
                 JsonObject dyeable = new JsonObject();
-                dyeable.addProperty("default_color", "#FFFFFF");
+                dyeable.addProperty("default_color", "#" + String.format(java.util.Locale.ROOT, "%06X",
+                        (item.dyeColor() == null ? 0xFFFFFF : item.dyeColor()) & 0xFFFFFF));
                 options.add("dyeable", dyeable);
             } else {
                 options.addProperty("icon", item.icon());
