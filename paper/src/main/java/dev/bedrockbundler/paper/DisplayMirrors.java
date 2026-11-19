@@ -277,8 +277,8 @@ final class DisplayMirrors implements Listener {
                 return;
             }
             Look look = describe(t);
-            if (look == null) {
-                dropStand(t); // nothing to show (yet): furniture, blank text, an empty frame, ...
+            if (look == null || !bedrockNear(t)) {
+                dropStand(t); // nothing to show (yet): furniture, blank text, an empty frame, nobody near, ...
                 return;
             }
             ArmorStand stand = t.stand;
@@ -307,6 +307,31 @@ final class DisplayMirrors implements Listener {
             // e.g. a translation that reaches into a chunk owned by another region
             plugin.getLogger().log(Level.FINE, "Could not mirror " + t.kind + " " + t.original.getUniqueId(), e);
         }
+    }
+
+    /**
+     * A mirror only exists while a Bedrock player of this region is within {@code displays.range} (a little more once
+     * it exists, so it does not flicker at the edge). The count of stands then follows the Bedrock players, not the
+     * size of the world; players of other regions are not looked at (not allowed on Folia).
+     */
+    private boolean bedrockNear(Tracked t) {
+        double range = settings.range();
+        if (range <= 0) {
+            return true;
+        }
+        double limit = (t.stand != null ? range + 16 : range);
+        Location at = t.original.getLocation();
+        for (Player player : support.players()) {
+            try {
+                if (plugin.getServer().isOwnedByCurrentRegion(player) && player.getWorld().equals(at.getWorld())
+                        && player.getLocation().distanceSquared(at) <= limit * limit) {
+                    return true;
+                }
+            } catch (RuntimeException ignored) {
+                // a player that left meanwhile
+            }
+        }
+        return false;
     }
 
     private ArmorStand spawn(Tracked t, Look look) {
@@ -368,8 +393,9 @@ final class DisplayMirrors implements Listener {
             return null; // FurnitureMirror owns it (it may have been tracked here before the plugin knew it)
         }
         ItemStack item = display.getItemStack();
-        if (item == null || item.getType().isAir() || !source.isCustomItem(item)) {
-            return null; // only custom items have the attachable that draws them on a stand
+        if (item == null || item.getType().isAir()
+                || (!source.isCustomItem(item) && !(settings.vanillaBlocks() && item.getType().isBlock()))) {
+            return null; // only custom items (and blocks) are drawn on a stand's head
         }
         Transformation transformation = display.getTransformation();
         float scale = transformation.getScale().y();
