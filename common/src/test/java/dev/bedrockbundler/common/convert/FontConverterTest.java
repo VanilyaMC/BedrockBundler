@@ -192,4 +192,21 @@ class FontConverterTest {
         assertFalse(mcpack.containsKey("font/glyph_4E.png"), "CJK");
         assertTrue(mcpack.containsKey("font/glyph_A4.png"), "Yi syllables, which Nexo hands out");
     }
+    @Test
+    void copiesOfTheVanillaFontKeepBedrocksOwnPages() throws IOException {
+        Map<String, byte[]> pack = new HashMap<>();
+        pack.put("assets/minecraft/textures/font/nonlatin_european.png", Textures.png(solid(16, 16, 0xFFFF0000, 0xFF00FF00, 0xFF0000FF)));
+        pack.put("assets/minecraft/font/default.json", "{\"providers\": []}".getBytes(StandardCharsets.UTF_8));
+        // A shifted row font (glyph menus): vanilla sheet, small caps U+1D00, box drawing U+2502, and a private-use icon
+        pack.put("assets/vanilya/font/satir_5.json", """
+                {"providers": [
+                  {"type": "bitmap", "file": "minecraft:font/nonlatin_european.png", "ascent": 8, "chars": ["\u1d00\u2502\ue400"]}
+                ]}""".getBytes(StandardCharsets.UTF_8));
+        Converter.Result result = Converter.convert(new ConversionInput(pack, List.of(), List.of()),
+                ConversionContext.Options.DEFAULT, "Test");
+        Map<String, byte[]> mcpack = JavaPack.readZip(new ByteArrayInputStream(result.mcpack()));
+        assertFalse(mcpack.containsKey("font/glyph_1D.png"), "small caps stay Bedrock's");
+        assertFalse(mcpack.containsKey("font/glyph_25.png"), "box drawing stays Bedrock's");
+        assertTrue(mcpack.containsKey("font/glyph_E4.png"), "private use is still taken");
+    }
 }

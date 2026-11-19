@@ -770,9 +770,14 @@ final class ModelPackGenerator {
 
     // ---- render controllers (RenderController) ---------------------------------------------------------------
 
+    /**
+     * True while bit {@code index} of {@code <property><k>} is set; for {@code bone} the bit marks a HIDDEN bone
+     * (what the runtime sends: BetterModel reports the bones it hides), so a bone shows while its bit is clear and a
+     * model with no state yet (all properties 0) shows every bone.
+     */
     private String visibleExpression(String property, int index) {
         return "math.mod(math.floor(query.property('" + opt.namespace() + ":" + property + index / BITS + "') / "
-                + (1 << (index % BITS)) + "), 2) == 1";
+                + (1 << (index % BITS)) + "), 2) == " + (property.equals("bone") ? 0 : 1);
     }
 
     private void writeRenderControllers() {

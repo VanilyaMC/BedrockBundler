@@ -202,9 +202,9 @@ class ModelConverterTest {
         JsonArray visibility = base.getAsJsonArray("part_visibility");
         assertFalse(visibility.get(0).getAsJsonObject().get("*").getAsBoolean());
         assertEquals(3, visibility.size(), "star, body and h_head (root has no cubes)");
-        assertEquals("(math.mod(math.floor(query.property('bedrockbundler:bone0') / 1), 2) == 1) && !(math.mod(math.floor(query.property('bedrockbundler:tintmask0') / 1), 2) == 1)",
+        assertEquals("(math.mod(math.floor(query.property('bedrockbundler:bone0') / 1), 2) == 0) && !(math.mod(math.floor(query.property('bedrockbundler:tintmask0') / 1), 2) == 1)",
                 visibility.get(1).getAsJsonObject().get("body").getAsString());
-        assertEquals("(math.mod(math.floor(query.property('bedrockbundler:bone0') / 2), 2) == 1) && !(math.mod(math.floor(query.property('bedrockbundler:tintmask0') / 2), 2) == 1)",
+        assertEquals("(math.mod(math.floor(query.property('bedrockbundler:bone0') / 2), 2) == 0) && !(math.mod(math.floor(query.property('bedrockbundler:tintmask0') / 2), 2) == 1)",
                 visibility.get(2).getAsJsonObject().get("h_head").getAsString());
         JsonObject tint = controllers.getAsJsonObject("controller.render.bb_fixture_body_tint");
         assertEquals(0.0, tint.getAsJsonObject("overlay_color").get("r").getAsDouble());
