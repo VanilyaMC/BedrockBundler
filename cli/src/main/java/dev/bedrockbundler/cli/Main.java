@@ -21,7 +21,7 @@ import java.util.Map;
  *
  * <pre>
  * java -jar BedrockBundler-cli.jar --nexo plugins/Nexo [--pack plugins/Nexo/pack/pack.zip]
- *      --out build/bedrock [--geyser /path/to/geyser] [--pack-name Name] [--prefix name]
+ *      --out build/bedrock [--geyser /path/to/geyser] [--pack-name Name] [--prefix name] [--models plugins/BetterModel/models]
  * </pre>
  *
  * <ul>
@@ -39,7 +39,7 @@ public final class Main {
         Map<String, String> options = parse(args);
         if (!options.containsKey("nexo") || !options.containsKey("out")) {
             System.err.println("Usage: --nexo <Nexo folder> --out <dir> [--pack <generated pack.zip>] [--geyser <Geyser folder>]"
-                    + " [--pack-name <name>] [--prefix <file prefix>] [--icon-size 64] [--no-fonts]");
+                    + " [--pack-name <name>] [--prefix <file prefix>] [--icon-size 64] [--no-fonts] [--models <BetterModel/models>]");
             System.exit(2);
             return;
         }
@@ -59,6 +59,10 @@ public final class Main {
         // Nexo places GUI glyphs with explicit shifts; without one a glyph starts at the title.
         conversionOptions = conversionOptions.withGuiOffsets(0, folder.glyphOffsets());
         ConversionInput input = folder.input(generated);
+        if (options.containsKey("models")) {
+            input = new ConversionInput(input.javaPack(), input.items(), input.blocks(),
+                    input.paintings(), input.emotes(), readModels(Path.of(options.get("models"))));
+        }
         Converter.Result result = Converter.convert(input, conversionOptions, packName);
 
         Path bundle = out.resolve("bundle");
@@ -81,9 +85,25 @@ public final class Main {
             }
         }
 
-        System.out.printf("Converted %d of %d Nexo items and %d blocks (%d warnings) -> %s%n",
-                result.bundle().items().size(), folder.itemCount(), result.bundle().blocks().size(), warnings.size(), out);
+        System.out.printf("Converted %d of %d Nexo items, %d blocks and %d entity models (%d warnings) -> %s%n",
+                result.bundle().items().size(), folder.itemCount(), result.bundle().blocks().size(),
+                result.bundle().models().size(), warnings.size(), out);
         warnings.forEach(w -> System.out.println("  warning: " + w));
+    }
+
+    /** The BetterModel folder: every {@code *.bbmodel}, id = file name in lower case. */
+    private static List<dev.bedrockbundler.common.model.ModelInput> readModels(Path directory) throws IOException {
+        List<dev.bedrockbundler.common.model.ModelInput> models = new ArrayList<>();
+        try (var files = Files.list(directory)) {
+            for (Path file : files.sorted().toList()) {
+                String name = file.getFileName().toString();
+                if (name.endsWith(".bbmodel")) {
+                    models.add(new dev.bedrockbundler.common.model.ModelInput(
+                            name.substring(0, name.length() - ".bbmodel".length()).toLowerCase(java.util.Locale.ROOT), Files.readAllBytes(file)));
+                }
+            }
+        }
+        return models;
     }
 
     private static void write(Path target, byte[] bytes) throws IOException {
