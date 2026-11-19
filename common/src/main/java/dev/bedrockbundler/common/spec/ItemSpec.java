@@ -12,6 +12,10 @@ package dev.bedrockbundler.common.spec;
  * @param creativeCategory {@code items}, {@code equipment}, {@code construction} or {@code nature}
  * @param protection      armor points shown on Bedrock
  * @param tags            Bedrock item tags, e.g. {@code minecraft:horse_armor} so horses accept the item
+ * @param dyedIcon        key in {@code item_texture.json} of the grayscale icon Bedrock tints with the item's dye
+ *                        colour; set (not null) marks the item as dyeable. Absent in older bundles, then null.
+ * @param dyeColor        RGB colour ({@code 0xRRGGBB}) of the undyed item, Bedrock's {@code default_color}; only with
+ *                        {@code dyedIcon}
  */
 public record ItemSpec(
         String javaItem,
@@ -27,8 +31,26 @@ public record ItemSpec(
         String equipSlot,
         int protection,
         Food food,
-        java.util.List<String> tags
+        java.util.List<String> tags,
+        String dyedIcon,
+        Integer dyeColor
 ) {
+
+    /** Constructor of the format before the dye colour: undyed colour white. */
+    public ItemSpec(String javaItem, String model, Integer customModelData, String bedrockId, String displayName,
+                    String icon, boolean handheld, String creativeCategory, Integer maxStackSize, Integer maxDamage,
+                    String equipSlot, int protection, Food food, java.util.List<String> tags, String dyedIcon) {
+        this(javaItem, model, customModelData, bedrockId, displayName, icon, handheld, creativeCategory, maxStackSize,
+                maxDamage, equipSlot, protection, food, tags, dyedIcon, dyedIcon == null ? null : 0xFFFFFF);
+    }
+
+    /** Constructor of the format before dyeable items: not dyeable. */
+    public ItemSpec(String javaItem, String model, Integer customModelData, String bedrockId, String displayName,
+                    String icon, boolean handheld, String creativeCategory, Integer maxStackSize, Integer maxDamage,
+                    String equipSlot, int protection, Food food, java.util.List<String> tags) {
+        this(javaItem, model, customModelData, bedrockId, displayName, icon, handheld, creativeCategory, maxStackSize,
+                maxDamage, equipSlot, protection, food, tags, null, null);
+    }
 
     public record Food(int nutrition, float saturation, boolean canAlwaysEat) {
     }

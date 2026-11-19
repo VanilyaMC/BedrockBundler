@@ -181,4 +181,34 @@ public final class Textures {
             throw new UncheckedIOException(e);
         }
     }
+
+    /**
+     * Uncompressed 32 bit true colour TGA (image type 2, origin top left, 8 alpha bits), the format Bedrock's own
+     * packs use for the grayscale textures of dyeable items. Bedrock multiplies these with the dye colour.
+     */
+    public static byte[] tga(BufferedImage image) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        ByteBuffer buffer = ByteBuffer.allocate(18 + width * height * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        buffer.put((byte) 0);            // no image id
+        buffer.put((byte) 0);            // no colour map
+        buffer.put((byte) 2);            // uncompressed true colour
+        buffer.put(new byte[5]);         // colour map specification
+        buffer.putShort((short) 0);      // x origin
+        buffer.putShort((short) 0);      // y origin
+        buffer.putShort((short) width);
+        buffer.putShort((short) height);
+        buffer.put((byte) 32);           // bits per pixel
+        buffer.put((byte) 0x28);         // 8 alpha bits, top-left origin
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int argb = image.getRGB(x, y);
+                buffer.put((byte) argb);                 // blue
+                buffer.put((byte) (argb >> 8));          // green
+                buffer.put((byte) (argb >> 16));         // red
+                buffer.put((byte) (argb >>> 24));        // alpha
+            }
+        }
+        return buffer.array();
+    }
 }

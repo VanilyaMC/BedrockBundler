@@ -108,16 +108,49 @@ public final class ModelResolver {
         return pick(Json.object(node, "on_true"), null);
     }
 
+    /**
+     * The {@code model} (or {@code special}) node an item renders with, with its {@code tints}; null when nothing
+     * matches or the item only points at a model file. Same choice as {@link #itemModel}.
+     */
+    public JsonObject modelNode(String itemModel, String material, Integer customModelData) {
+        if (itemModel != null) {
+            JsonObject definition = pack.json(ResourceId.parse(itemModel).asset("items", ".json"));
+            return definition == null ? null : pickNode(Json.object(definition, "model"), customModelData);
+        }
+        if (customModelData == null) {
+            return null;
+        }
+        ResourceId base = ResourceId.parse(material);
+        JsonObject definition = pack.json(base.asset("items", ".json"));
+        JsonObject node = definition == null ? null : pickNode(Json.object(definition, "model"), customModelData);
+        ResourceId picked = nodeModel(node);
+        // The fallback of a vanilla definition is the vanilla model, which is not a match.
+        return picked != null && !picked.equals(new ResourceId("minecraft", "item/" + base.path())) ? node : null;
+    }
+
     /** Walks a 1.21.4+ item model definition tree down to a plain model reference. */
     private ResourceId pick(JsonObject node, Integer customModelData) {
+        return nodeModel(pickNode(node, customModelData));
+    }
+
+    private static ResourceId nodeModel(JsonObject leaf) {
+        if (leaf == null) {
+            return null;
+        }
+        String type = Json.string(leaf, "type", "minecraft:model").replace("minecraft:", "");
+        String model = Json.string(leaf, type.equals("special") ? "base" : "model", null);
+        return model == null ? null : ResourceId.parse(model);
+    }
+
+    /** Walks the definition tree down to the leaf node: a {@code model} or {@code special} entry, or null. */
+    private JsonObject pickNode(JsonObject node, Integer customModelData) {
         if (node == null) {
             return null;
         }
         String type = Json.string(node, "type", "minecraft:model").replace("minecraft:", "");
         switch (type) {
-            case "model" -> {
-                String model = Json.string(node, "model", null);
-                return model == null ? null : ResourceId.parse(model);
+            case "model", "special" -> {
+                return node;
             }
             case "range_dispatch" -> {
                 JsonArray entries = Json.array(node, "entries");
@@ -134,36 +167,32 @@ public final class ModelResolver {
                         }
                     }
                     if (best != null) {
-                        return pick(Json.object(best, "model"), customModelData);
+                        return pickNode(Json.object(best, "model"), customModelData);
                     }
                 }
                 JsonObject fallback = Json.object(node, "fallback");
                 if (fallback != null) {
-                    return pick(fallback, customModelData);
+                    return pickNode(fallback, customModelData);
                 }
                 return entries != null && !entries.isEmpty()
-                        ? pick(Json.object(entries.get(0).getAsJsonObject(), "model"), customModelData) : null;
+                        ? pickNode(Json.object(entries.get(0).getAsJsonObject(), "model"), customModelData) : null;
             }
             case "select" -> {
                 JsonObject fallback = Json.object(node, "fallback");
                 if (fallback != null) {
-                    return pick(fallback, customModelData);
+                    return pickNode(fallback, customModelData);
                 }
                 JsonArray cases = Json.array(node, "cases");
                 return cases != null && !cases.isEmpty()
-                        ? pick(Json.object(cases.get(0).getAsJsonObject(), "model"), customModelData) : null;
+                        ? pickNode(Json.object(cases.get(0).getAsJsonObject(), "model"), customModelData) : null;
             }
             case "condition" -> {
-                ResourceId onFalse = pick(Json.object(node, "on_false"), customModelData);
-                return onFalse != null ? onFalse : pick(Json.object(node, "on_true"), customModelData);
+                JsonObject onFalse = pickNode(Json.object(node, "on_false"), customModelData);
+                return nodeModel(onFalse) != null ? onFalse : pickNode(Json.object(node, "on_true"), customModelData);
             }
             case "composite" -> {
                 JsonArray models = Json.array(node, "models");
-                return models != null && !models.isEmpty() ? pick(models.get(0).getAsJsonObject(), customModelData) : null;
-            }
-            case "special" -> {
-                String base = Json.string(node, "base", null);
-                return base == null ? null : ResourceId.parse(base);
+                return models != null && !models.isEmpty() ? pickNode(models.get(0).getAsJsonObject(), customModelData) : null;
             }
             default -> {
                 return null;
