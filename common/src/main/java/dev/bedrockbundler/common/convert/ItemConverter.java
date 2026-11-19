@@ -14,7 +14,9 @@ import dev.bedrockbundler.common.spec.ItemSpec;
 
 import java.awt.image.BufferedImage;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /** Turns ItemsAdder items into Geyser item specs plus their textures, geometry and attachables. */
 public final class ItemConverter {
@@ -98,21 +100,40 @@ public final class ItemConverter {
         ArmorConverter.Worn worn = item.equipSlot() != null && item.armorAsset() != null
                 ? armor.worn(bedrockId, flat, item.equipSlot(), item.armorAsset()) : null;
 
+        // Tints: dye tinted parts become dyeable icons and attachables, the rest is baked into the textures.
+        List<DyeSupport.Tint> tints = DyeSupport.parse(
+                ctx.models().modelNode(item.itemModel(), item.material(), item.customModelData()), ctx.log(), item.id());
+        boolean wornDyed = worn != null && worn.dyed() != null;
+        BufferedImage dyedIcon = null;
         boolean handheld = false;
         BufferedImage iconImage;
         if (model != null && model.kind() == JavaModel.Kind.ELEMENTS) {
-            iconImage = IconRenderer.render(model, ctx.textures()::load, ctx.options().iconSize());
+            DyeSupport.Plan dye = DyeSupport.plan(model, tints, ctx.log(), item.id());
+            JavaModel shown = dye == null ? model : dye.undyed();
+            Function<String, BufferedImage> loader = DyeSupport.loader(ctx.textures()::load);
+            iconImage = IconRenderer.render(shown, loader, ctx.options().iconSize());
+            if (dye != null && dye.dyed() != null) {
+                dyedIcon = IconRenderer.render(dye.dyed(), loader, ctx.options().iconSize());
+            }
             ResourceId usingId = ctx.models().usingItemModel(item.itemModel());
             JavaModel using = usingId == null ? null : ctx.models().model(usingId);
-            attachable(bedrockId, flat, model, using, item, worn, Map.of());
+            attachable(bedrockId, flat, shown, using, item, worn, Map.of(), dye);
         } else if (model != null && model.flat()) {
-            iconImage = layered(model);
+            iconImage = layered(model, tints, false);
+            if (DyeSupport.hasDye(tints)) {
+                dyedIcon = layered(model, tints, true);
+                for (int layer = 0; layer < 8 && model.textures().containsKey("layer" + layer); layer++) {
+                    if (layer >= tints.size() || tints.get(layer).kind() != DyeSupport.Kind.DYE) {
+                        ctx.log().warn("Item " + item.id() + ": layer" + layer + " is not dye tinted on Java but gets the dye colour on Bedrock");
+                    }
+                }
+            }
             handheld = model.kind() == JavaModel.Kind.HANDHELD;
             if (worn != null && iconImage != null) {
                 // An attachable replaces the flat icon Bedrock draws in a hand, so the sprite is built as a model
                 // the way Java builds item/generated ones.
                 attachable(bedrockId, flat, GeneratedItemModel.of(model, iconImage, GeneratedItemModel.TEXTURE),
-                        null, item, worn, Map.of(GeneratedItemModel.TEXTURE, iconImage));
+                        null, item, worn, Map.of(GeneratedItemModel.TEXTURE, iconImage), null);
                 worn = null;
             }
         } else {
@@ -135,7 +156,15 @@ public final class ItemConverter {
         if (worn != null && (model == null || model.kind() != JavaModel.Kind.ELEMENTS)) {
             // No model to hold (missing or empty): the worn part alone.
             attachable(bedrockId, flat, GeneratedItemModel.of(model, iconImage, GeneratedItemModel.TEXTURE),
-                    null, item, worn, Map.of(GeneratedItemModel.TEXTURE, iconImage));
+                    null, item, worn, Map.of(GeneratedItemModel.TEXTURE, iconImage), null);
+        }
+        if (wornDyed && dyedIcon == null) {
+            dyedIcon = DyeSupport.gray(iconImage); // a dyeable armor layer, but the item model has no dye tint
+        }
+        if (dyedIcon != null) {
+            // Bedrock tints this grayscale icon with the item's colour; the default icon shows the undyed look.
+            ctx.bedrockPack().file(iconPath + "_dyed.tga", Textures.tga(dyedIcon));
+            ctx.bedrockPack().itemTexture(icon + "_dyed", iconPath + "_dyed");
         }
         java.util.List<String> tags = armor.tags(item);
 
@@ -157,11 +186,16 @@ public final class ItemConverter {
                 item.equipSlot(),
                 item.protection(),
                 food,
-                tags);
+                tags,
+                dyedIcon == null ? null : icon + "_dyed");
     }
 
-    /** Flat items: layer0 with any higher layers drawn on top. */
-    private BufferedImage layered(JavaModel model) {
+    /**
+     * Flat items: layer0 with any higher layers drawn on top, each with the tint of its index.
+     *
+     * @param dyed the icon Bedrock tints with the dye colour: dye tinted layers in grayscale
+     */
+    private BufferedImage layered(JavaModel model, List<DyeSupport.Tint> tints, boolean dyed) {
         BufferedImage result = null;
         for (int layer = 0; layer < 8; layer++) {
             String texture = model.textures().get("layer" + layer);
@@ -172,6 +206,7 @@ public final class ItemConverter {
             if (image == null) {
                 continue;
             }
+            image = DyeSupport.layer(image, layer < tints.size() ? tints.get(layer) : null, dyed);
             if (result == null) {
                 result = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
             }
@@ -197,7 +232,10 @@ public final class ItemConverter {
      *              display transforms are used: Java's variants share their elements.
      */
     private void attachable(String bedrockId, String flat, JavaModel model, JavaModel using, IaItem item,
-                            ArmorConverter.Worn worn, Map<String, BufferedImage> preloaded) {
+                            ArmorConverter.Worn worn, Map<String, BufferedImage> preloaded, DyeSupport.Plan dye) {
+        boolean itemDyed = dye != null && dye.dyed() != null;
+        boolean wornDyed = worn != null && worn.dyed() != null;
+        Function<String, BufferedImage> loader = DyeSupport.loader(ctx.textures()::load);
         boolean shield = item.material().equals("minecraft:shield");
         boolean trident = item.material().equals("minecraft:trident");
         // A thrown trident is drawn like an item display (FurnitureMirror): Nexo uses the display context of
@@ -208,13 +246,16 @@ public final class ItemConverter {
             for (JavaModel.Face face : element.faces().values()) {
                 if (face.texture() != null) {
                     textures.computeIfAbsent(face.texture(),
-                            id -> preloaded.containsKey(id) ? preloaded.get(id) : ctx.textures().load(id));
+                            id -> preloaded.containsKey(id) ? preloaded.get(id) : loader.apply(id));
                 }
             }
         }
         TextureAtlas atlas = TextureAtlas.build(textures);
         String texturePath = "textures/" + ConversionContext.NAMESPACE + "/models/" + flat;
         ctx.bedrockPack().file(texturePath + ".png", Textures.png(atlas.image()));
+        if (itemDyed) {
+            ctx.bedrockPack().file(texturePath + "_dyed.tga", Textures.tga(DyeSupport.dyedAtlas(atlas, dye.grayOf(), ctx.textures()::load)));
+        }
 
         String geometryId = "geometry." + ConversionContext.NAMESPACE + "." + flat;
         ctx.bedrockPack().json("models/entity/" + ConversionContext.NAMESPACE + "/" + flat + ".geo.json",
@@ -302,6 +343,12 @@ public final class ItemConverter {
         description.addProperty("identifier", bedrockId);
         description.add("materials", stringMap("default", "entity_alphatest", "enchanted", "entity_alphatest_glint"));
         description.add("textures", stringMap("default", texturePath, "enchanted", "textures/misc/enchanted_item_glint"));
+        if (itemDyed) {
+            // Microsoft's dyeable item recipe: a grayscale texture drawn with the change_color material while the
+            // item carries a dye colour (see DyeSupport.preAnimation).
+            description.getAsJsonObject("materials").addProperty("dyed", DyeSupport.DYED_MATERIAL);
+            description.getAsJsonObject("textures").addProperty("dyed", texturePath + "_dyed.tga");
+        }
         description.add("geometry", stringMap("default", geometryId));
         description.add("animations", animationRefs);
         JsonObject scripts = new JsonObject();
@@ -314,9 +361,14 @@ public final class ItemConverter {
             // Geyser sets these on the owner while the Java player uses the item (blocking also for shields).
             preAnimation.add("v.using = q.is_using_item || q.blocking;");
         }
+        if (itemDyed || wornDyed) {
+            DyeSupport.writeControllers(ctx);
+            DyeSupport.preAnimation(wornDyed ? worn.dyed().slot() : -1).forEach(preAnimation::add);
+        }
+        String heldController = itemDyed ? DyeSupport.ITEM_CONTROLLER : "controller.render.item_default";
         JsonArray renderControllers = new JsonArray();
         if (worn == null) {
-            renderControllers.add("controller.render.item_default");
+            renderControllers.add(heldController);
         } else {
             // Held: the item model. Anywhere else (armor slots, an animal's body, a stand): the armor.
             preAnimation.add("v.held = c.item_slot == 'main_hand' || c.item_slot == 'off_hand';");
@@ -329,7 +381,7 @@ public final class ItemConverter {
             if (worn.parentSetup() != null) {
                 scripts.addProperty("parent_setup", worn.parentSetup());
             }
-            renderControllers.add(stringMap("controller.render.item_default", "v.held"));
+            renderControllers.add(stringMap(heldController, "v.held"));
             renderControllers.add(stringMap(worn.controller(), "!v.held"));
         }
         scripts.add("pre_animation", preAnimation);
@@ -340,7 +392,8 @@ public final class ItemConverter {
         JsonObject attachable = new JsonObject();
         attachable.add("description", description);
         JsonObject file = new JsonObject();
-        file.addProperty("format_version", "1.10.0");
+        // The dyed material needs 1.21.30; the other attachables keep the version their poses were tuned with.
+        file.addProperty("format_version", itemDyed || wornDyed ? DyeSupport.ATTACHABLE_FORMAT : "1.10.0");
         file.add("minecraft:attachable", attachable);
         ctx.bedrockPack().json("attachables/" + ConversionContext.NAMESPACE + "/" + flat + ".json", file);
     }
