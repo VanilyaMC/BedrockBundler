@@ -15,6 +15,8 @@ import org.bukkit.configuration.file.FileConfiguration;
  * @param text                 mirror text displays as name plates (Geyser already draws them; off by default)
  * @param textHideOriginal     hide the text display from Bedrock players while its mirror shows, so text is not drawn twice
  * @param textYOffset          fine-tuning of the name plate height, in blocks
+ * @param range                a mirror exists only while a Bedrock player of the same world is this close (blocks); 0 = always
+ * @param vanillaBlocks        also mirror item displays that show a vanilla block item (Geyser draws no item displays at all)
  */
 record DisplaySettings(
         boolean enabled,
@@ -25,7 +27,9 @@ record DisplaySettings(
         boolean blocks,
         boolean text,
         boolean textHideOriginal,
-        double textYOffset
+        double textYOffset,
+        double range,
+        boolean vanillaBlocks
 ) {
 
     static DisplaySettings load(FileConfiguration config) {
@@ -38,7 +42,9 @@ record DisplaySettings(
                 config.getBoolean("displays.blocks.enabled", false),
                 config.getBoolean("displays.text.enabled", false),
                 config.getBoolean("displays.text.hide-original", true),
-                config.getDouble("displays.text.y-offset", 0));
+                config.getDouble("displays.text.y-offset", 0),
+                Math.max(0, config.getDouble("displays.range", 64)),
+                config.getBoolean("displays.items.vanilla-blocks", true));
     }
 
     /** Whether any mirror kind is on, so the whole feature can stay unloaded otherwise. */

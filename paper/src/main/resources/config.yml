@@ -42,9 +42,15 @@ displays:
   enabled: true
   # Most mirror stands alive at once; a safety net against plugins that spawn thousands of displays.
   max-mirrors: 2000
+  # A mirror only exists while a Bedrock player of the same world is this many blocks from the display (0 = always).
+  # The number of stands then follows the Bedrock players near displays, not the size of the world.
+  range: 64
   items:
-    # Item displays of custom items that are not furniture (dungeon chests, backpacks, props of other plugins).
+    # Item displays of custom items that are not furniture (dungeon chests, backpacks, farming pot crops, props of
+    # other plugins). Geyser draws no item displays at all.
     enabled: true
+    # Also item displays that show a vanilla block item (Bedrock draws blocks, not other items, on a stand's head).
+    vanilla-blocks: true
   frames:
     # Item frames and glow item frames holding a custom item: Bedrock draws only the item's flat icon there.
     # Floor and ceiling frames and the item's rotation steps are not shown.
