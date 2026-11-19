@@ -277,7 +277,10 @@ public final class ModelMirror implements Listener {
                 if (!plugin.getServer().isOwnedByCurrentRegion(player)) {
                     continue;
                 }
-                boolean should = enabled && player.isOnline() && player.getWorld().equals(at.getWorld())
+                // Only players whose Geyser registered our channel: an older extension (or a failed one) cannot
+                // swap the stand for the model, and the player would see a bare stand instead.
+                boolean should = enabled && player.isOnline() && player.getListeningPluginChannels().contains(ModelMessages.CHANNEL)
+                        && player.getWorld().equals(at.getWorld())
                         && player.getLocation().distanceSquared(at) <= range * range && t.model.visibleTo(player);
                 boolean viewing = t.viewers.contains(player.getUniqueId());
                 if (should && !viewing) {
