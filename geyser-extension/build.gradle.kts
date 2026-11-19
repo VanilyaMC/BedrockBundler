@@ -6,6 +6,8 @@ dependencies {
     implementation(project(":common"))
     implementation(libs.gson)
     compileOnly(libs.geyser.api)
+    // Internals, only used by ModelChannel (receives the per-entity model state the plugin sends as plugin messages).
+    compileOnly(libs.geyser.core)
 }
 
 tasks.processResources {

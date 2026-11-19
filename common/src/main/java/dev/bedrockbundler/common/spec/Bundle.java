@@ -25,9 +25,20 @@ import java.util.zip.ZipOutputStream;
  *   geyser_block_mappings.json  the same blocks as Geyser format 1 JSON block mappings
  * </pre>
  */
-public record Bundle(int formatVersion, int converterVersion, String hash, List<ItemSpec> items, List<BlockSpec> blocks) {
+public record Bundle(int formatVersion, int converterVersion, String hash, List<ItemSpec> items, List<BlockSpec> blocks,
+                     List<dev.bedrockbundler.common.model.ModelSpec> models) {
 
-    public static final int FORMAT_VERSION = 1;
+    public static final int FORMAT_VERSION = 2;
+
+    public Bundle(int formatVersion, int converterVersion, String hash, List<ItemSpec> items, List<BlockSpec> blocks) {
+        this(formatVersion, converterVersion, hash, items, blocks, List.of());
+    }
+
+    /** Never null: bundles written before entity models existed have no list. */
+    @Override
+    public List<dev.bedrockbundler.common.model.ModelSpec> models() {
+        return models == null ? List.of() : models;
+    }
     public static final String SPEC_FILE = "bundle.json";
     public static final String PACK_FILE = "BedrockBundler.mcpack";
     public static final String MAPPINGS_FILE = "geyser_mappings.json";

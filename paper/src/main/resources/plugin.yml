@@ -4,7 +4,7 @@ main: dev.bedrockbundler.paper.BedrockBundlerPlugin
 api-version: '1.21.4'
 description: Makes Nexo and ItemsAdder content visible to Bedrock players on Geyser.
 folia-supported: true
-softdepend: [Nexo, ItemsAdder, Geyser-Spigot, floodgate]
+softdepend: [Nexo, ItemsAdder, Geyser-Spigot, floodgate, BetterModel]
 commands:
   bedrockbundler:
     description: Convert custom content for Bedrock and show status.
