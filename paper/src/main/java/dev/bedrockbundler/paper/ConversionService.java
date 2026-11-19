@@ -6,6 +6,8 @@ import dev.bedrockbundler.common.input.ConversionInput;
 import dev.bedrockbundler.common.input.IaBlock;
 import dev.bedrockbundler.common.input.IaItem;
 import dev.bedrockbundler.common.input.PaintingVariant;
+import dev.bedrockbundler.common.java.VanillaAssets;
+import dev.bedrockbundler.common.java.VanillaClientJar;
 import dev.bedrockbundler.common.spec.Bundle;
 import dev.bedrockbundler.paper.deploy.Deployer;
 import io.papermc.paper.registry.RegistryAccess;
@@ -172,10 +174,10 @@ final class ConversionService {
 
     private void run(ConversionInput content, ConversionContext.Options options, List<String> skippedBlocks,
                      boolean force, CommandSender sender) {
-        try {
+        try (VanillaAssets vanilla = vanillaAssets()) {
             ConversionInput input = new ConversionInput(content.javaPack(), content.items(), content.blocks(),
                     content.paintings(), content.emotes(), readModels());
-            String hash = Converter.hash(input, options);
+            String hash = Converter.hash(input, options, vanilla);
             Bundle existing = Bundle.read(bundleFolder);
             if (!force && existing != null && hash.equals(existing.hash())
                     && existing.converterVersion() == Converter.CONVERTER_VERSION) {
@@ -191,7 +193,7 @@ final class ConversionService {
             }
 
             long start = System.nanoTime();
-            Converter.Result result = Converter.convert(input, options, packName);
+            Converter.Result result = Converter.convert(input, options, packName, vanilla);
             result.bundle().write(bundleFolder, result.mcpack(), result.mappings(), result.blockMappings());
             writeWarnings(result.warnings(), skippedBlocks);
             deployer.deploy(bundleFolder);
@@ -214,6 +216,18 @@ final class ConversionService {
             plugin.getLogger().log(Level.SEVERE, "Bedrock conversion failed", e);
             message(sender, "Bedrock conversion failed: " + e.getMessage());
         }
+    }
+
+    /**
+     * Vanilla textures that custom models use but the content plugin's pack does not carry, from this server
+     * version's client jar (downloaded once into {@code vanilla/}). Without it those faces are not drawn on Bedrock.
+     */
+    private VanillaAssets vanillaAssets() {
+        if (!plugin.getConfig().getBoolean("vanilla-textures", true)) {
+            return VanillaAssets.NONE;
+        }
+        return VanillaClientJar.open(plugin.getServer().getMinecraftVersion(),
+                plugin.getDataFolder().toPath().resolve("vanilla"), message -> plugin.getLogger().warning(message));
     }
 
     private void writeWarnings(List<String> warnings, List<String> skippedBlocks) throws IOException {

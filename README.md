@@ -64,6 +64,9 @@ Geyser only loads custom content when it starts, so **restart after each convers
 - [x] Nexo 1.2x-1.30: items, note/string/chorus blocks, furniture (including evolving crops), armor, 3D hats, glyphs
 - [x] Folia and Folia forks (Canvas): region-safe furniture mirrors and scheduling
 - [x] Offline converter (`BedrockBundler-cli.jar`) for a Nexo folder, without a running server
+- [x] Vanilla textures that custom models use but the pack does not carry (such as `minecraft:block/oak_planks` on
+  furniture): read from the server version's vanilla client jar, downloaded once from Mojang into
+  `plugins/BedrockBundler/vanilla/`; only the textures in use go into the Bedrock pack (`vanilla-textures`)
 - [x] Skips unchanged conversions; warnings are written to `plugins/BedrockBundler/warnings.txt`
 
 ### Planned
