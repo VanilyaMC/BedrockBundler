@@ -39,6 +39,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The converter runs in its GeyserModelEngine layout and namespace here, so file paths and ids are comparable.
  */
 @EnabledIfEnvironmentVariable(named = "BB_GOLDEN", matches = "1")
+// NOTE: the reference pack of GeyserModelEngine packs 24 bits per property; ModelSpec.BITS_PER_PROPERTY is 19 now, so the
+// molang bit tests and property ranges differ from it by design. This test matched with 24 on 2026-11-19 (commit 231719d:
+// 94 models, 753 files, 0 mismatches); to repeat that, set BITS_PER_PROPERTY to 24 temporarily.
 class ModelGoldenTest {
 
     /** Arrays whose order carries no meaning (the reference iterates hash sets). */

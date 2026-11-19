@@ -111,7 +111,7 @@ final class BbmodelReader {
         }
         int boneCount = geometry.getAsJsonArray("minecraft:geometry").get(0).getAsJsonObject().getAsJsonArray("bones").size();
         int animationCount = animations.size();
-        int properties = ((boneCount + 23) / 24) * 2 + (animationCount + 23) / 24 + 1;
+        int properties = ModelSpec.propertyCount(boneCount) * 2 + ModelSpec.propertyCount(animationCount) + 1;
         if (properties > 32) {
             throw new ModelException("entity properties " + properties + " > 32 (" + boneCount + " bones, "
                     + animationCount + " animations): reduce the bone or animation count");
