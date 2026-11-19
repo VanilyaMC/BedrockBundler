@@ -13,6 +13,13 @@ pack-name: "BedrockBundler"
 # Size in pixels of inventory icons rendered for 3D models (16-256).
 icon-size: 64
 
+# Vanilla textures that custom models use but the content plugin's pack does not carry (for example
+# minecraft:block/oak_planks on furniture). They come from the vanilla client jar of this server's version, downloaded
+# once from Mojang into plugins/BedrockBundler/vanilla/; only the textures in use go into the Bedrock pack.
+# Without it (false, or no internet) Bedrock does not draw those faces. To skip the download, put the client jar there
+# as client-<version>.jar.
+vanilla-textures: true
+
 fonts:
   # Convert font images (emojis, chat icons) to Bedrock glyph sheets. Bedrock draws glyphs at text size,
   # so HUDs and GUI backgrounds made of tall glyphs do not look like on Java.

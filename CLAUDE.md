@@ -20,6 +20,8 @@ Convert a real Nexo pack without a server (handy to inspect output or check a co
 java -jar cli/build/libs/BedrockBundler-cli-<version>.jar --nexo test-nexo/plugins/Nexo --pack test-nexo/plugins/Nexo/pack/pack.zip --out <dir>
 ```
 
+Add `--mc-version 26.3` (downloads that client jar once into `--vanilla-cache`, default `vanilla-cache`) or `--client-jar <jar>` so models that use vanilla textures keep those faces.
+
 - `paper` compiles against the public Nexo API (`repo.nexomc.com`). The ItemsAdder hook (`paper/src/itemsadder/java`) is only compiled when `libs/ItemsAdder-*.jar` exists; that jar is a paid plugin: git-ignored, never commit or redistribute it.
 - `cli` is the offline converter for a Nexo folder (`NexoFolder`, `NexoBlockStates`), with its own tests.
 - No Java toolchain is configured: any JDK 21+ builds, `options.release = 21`.
@@ -56,6 +58,7 @@ BetterModel models (entity models, `paper/.../model/`, `common/.../model/`, `gey
 
 - **Bundle format 2 added `models`.** `Bundle.FORMAT_VERSION` and `Converter.CONVERTER_VERSION` (25) were bumped together: stage the plugin jar and the extension jar together or everything goes dark with one warning line.
 - **Bump `Converter.CONVERTER_VERSION` whenever converter output changes.** It is part of the bundle hash and stored in the bundle. Unchanged hashes skip conversion, and the extension ignores bundles from a different converter version.
+- **Vanilla textures.** `Textures.load` falls back to `VanillaAssets` (the vanilla client jar of the server version, `VanillaClientJar`, cached in `plugins/BedrockBundler/vanilla/`) for `minecraft:` textures the pack does not carry, and copies only the referenced ones into the pack. Font sheets (`minecraft:font/...`) are excluded: Bedrock keeps its own font pages. `BlockConverter` still points vanilla block textures at Bedrock's own terrain textures (`isVanilla`). The vanilla version is part of the hash, so an offline start (`none`) converts again once the jar is there.
 - **Geyser loads custom content only at startup.** Every content change needs conversion then a restart. Never overwrite a pack Geyser is serving: it hashes the file once, which is why the extension serves from `active/`, not `bundle/`.
 - **ItemsAdder's generated pack is protected.** `JavaPack` and `Textures` undo this; keep that in mind before assuming plain paths:
   - real item definitions live in `ia_overlay_*` dirs (overlays for the newest pack format are applied);

@@ -9,6 +9,7 @@ import dev.bedrockbundler.common.input.IaBlock;
 import dev.bedrockbundler.common.input.IaItem;
 import dev.bedrockbundler.common.java.JavaPack;
 import dev.bedrockbundler.common.java.ModelResolver;
+import dev.bedrockbundler.common.java.VanillaAssets;
 import dev.bedrockbundler.common.model.ModelConverter;
 import dev.bedrockbundler.common.model.ModelInput;
 import dev.bedrockbundler.common.model.ModelSpec;
@@ -27,7 +28,7 @@ import java.util.Set;
 public final class Converter {
 
     /** Bump whenever converter output changes, so servers regenerate bundles made by older versions. */
-    public static final int CONVERTER_VERSION = 40;
+    public static final int CONVERTER_VERSION = 41;
 
     public record Result(Bundle bundle, byte[] mcpack, byte[] mappings, byte[] blockMappings, List<String> warnings) {
     }
@@ -37,7 +38,12 @@ public final class Converter {
 
     /** Hash identifying the conversion input; equal hashes produce identical output. */
     public static String hash(ConversionInput input, ConversionContext.Options options) {
-        String extra = CONVERTER_VERSION + "|" + options + "|" + Json.GSON.toJson(input.items()) + "|" + Json.GSON.toJson(input.blocks())
+        return hash(input, options, VanillaAssets.NONE);
+    }
+
+    /** As {@link #hash(ConversionInput, ConversionContext.Options)}; the vanilla assets' version changes the output. */
+    public static String hash(ConversionInput input, ConversionContext.Options options, VanillaAssets vanilla) {
+        String extra = CONVERTER_VERSION + "|" + vanilla.version() + "|" + options + "|" + Json.GSON.toJson(input.items()) + "|" + Json.GSON.toJson(input.blocks())
                 + (input.paintings().isEmpty() ? "" : "|" + Json.GSON.toJson(input.paintings()))
                 + (input.emotes().isEmpty() ? "" : "|" + Json.GSON.toJson(input.emotes()))
                 + "|" + modelsDigest(input);
@@ -98,6 +104,15 @@ public final class Converter {
     }
 
     public static Result convert(ConversionInput input, ConversionContext.Options options, String packName) {
+        return convert(input, options, packName, VanillaAssets.NONE);
+    }
+
+    /**
+     * @param vanilla vanilla client files; {@code minecraft:} textures that models use but the pack does not carry
+     *                are copied from here into the Bedrock pack
+     */
+    public static Result convert(ConversionInput input, ConversionContext.Options options, String packName,
+                                 VanillaAssets vanilla) {
         ConversionLog log = new ConversionLog();
         Map<String, byte[]> files = input.javaPack();
         List<IaItem> paintings = List.of();
@@ -109,7 +124,7 @@ public final class Converter {
         JavaPack javaPack = new JavaPack(files);
         BedrockPack bedrockPack = new BedrockPack();
         ConversionContext ctx = new ConversionContext(javaPack, new ModelResolver(javaPack, log),
-                new Textures(javaPack, log), bedrockPack, log, options);
+                new Textures(javaPack, vanilla, log), bedrockPack, log, options);
 
         List<IaItem> sortedItems = new ArrayList<>(input.items());
         sortedItems.addAll(modelVariants(input.items(), javaPack));
