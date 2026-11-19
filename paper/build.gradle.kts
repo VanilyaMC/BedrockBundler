@@ -27,6 +27,12 @@ dependencies {
     compileOnly(libs.geyser.api)
     compileOnly(libs.nexo) { isTransitive = false }
     compileOnly(itemsAdderJars)
+
+    // compileOnly does not reach the test classpath; the display tests need Bukkit and Adventure classes.
+    testImplementation(libs.paper.api)
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.launcher)
 }
 
 tasks.processResources {

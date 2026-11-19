@@ -26,6 +26,7 @@ public final class BedrockBundlerPlugin extends JavaPlugin {
     private Settings settings;
     private ConversionService conversion;
     private FurnitureMirror furniture;
+    private DisplayMirrors displays;
     private BedrockPlayers bedrockPlayers;
     private ContentSource source;
     private EmotePlayer emotePlayer;
@@ -73,6 +74,17 @@ public final class BedrockBundlerPlugin extends JavaPlugin {
             }
         }
 
+        if (settings.displays().any()) {
+            if (bedrockPlayers == null) {
+                getLogger().warning("Display mirrors for Bedrock need Floodgate or Geyser-Spigot on this server; they are disabled.");
+            } else {
+                displays = new DisplayMirrors(this, bedrockPlayers, source, settings.displays(),
+                        settings.furnitureYawOffset(), settings.furnitureYOffset());
+                displays.start();
+                getLogger().info("Showing display entities and item frames to Bedrock players (detected via " + bedrockPlayers.source() + ")");
+            }
+        }
+
         source.enable(this);
         getLogger().info("Converting " + source.pluginName() + " content for Bedrock" + (Scheduling.isFolia() ? " (Folia scheduling)" : ""));
         PluginCommand command = getCommand("bedrockbundler");
@@ -87,6 +99,9 @@ public final class BedrockBundlerPlugin extends JavaPlugin {
     public void onDisable() {
         if (furniture != null) {
             furniture.stop();
+        }
+        if (displays != null) {
+            displays.stop();
         }
         if (conversion != null) {
             conversion.shutdown();
@@ -231,6 +246,18 @@ public final class BedrockBundlerPlugin extends JavaPlugin {
 
     ContentSource source() {
         return source;
+    }
+
+    /** Mirror stands alive per kind, for {@code /bedrockbundler status}; null when nothing is mirrored. */
+    String mirrorStatus() {
+        StringBuilder line = new StringBuilder();
+        if (furniture != null) {
+            line.append(furniture.count()).append(" furniture");
+        }
+        if (displays != null) {
+            line.append(line.isEmpty() ? "" : ", ").append(displays.statusLine());
+        }
+        return line.isEmpty() ? null : line.toString();
     }
 
     private void reply(CommandSender sender, String message) {

@@ -83,6 +83,11 @@ public final class ItemsAdderSource implements ContentSource {
         return JavaPack.readZip(zip);
     }
 
+    /**
+     * Every item display of a custom item counts as furniture here, so {@code FurnitureMirror} owns them all and
+     * {@code DisplayMirrors} finds no "other" item displays. Armor stand furniture needs no mirror: Geyser draws
+     * armor stands and the items they wear.
+     */
     @Override
     public boolean isFurniture(ItemDisplay display) {
         return isCustomItem(display.getItemStack());

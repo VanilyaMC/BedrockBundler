@@ -221,6 +221,13 @@ public final class NexoSource implements ContentSource {
         return 0;
     }
 
+    /**
+     * Nexo 1.29 furniture is always an {@code item_display} (its own {@code NexoFurniture.isFurniture(Entity)}
+     * returns false for any other entity type, and the 1.29.1 jar has no item frame or armor stand code), so there
+     * is no frame or armor stand furniture to mirror for Nexo; Nexo converts old frame furniture itself. Hitboxes
+     * (interaction entities) and furniture text entities are packet-only, which Geyser translates. Custom items in
+     * plain item frames and item displays that are not furniture are handled by {@code DisplayMirrors}.
+     */
     @Override
     public boolean isFurniture(ItemDisplay display) {
         try {
