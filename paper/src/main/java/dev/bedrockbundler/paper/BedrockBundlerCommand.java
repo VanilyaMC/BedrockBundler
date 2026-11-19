@@ -27,9 +27,24 @@ final class BedrockBundlerCommand implements TabExecutor {
                 plugin.convertFromDisk(force, sender);
             }
             case "status" -> status(sender);
-            default -> sender.sendMessage("Usage: /" + label + " <reload [-f]|status>");
+            case "animate" -> animate(sender, label, args);
+            default -> sender.sendMessage("Usage: /" + label + " <reload [-f]|status|animate <animation> [player]>");
         }
         return true;
+    }
+
+    /** Plays a Bedrock animation on a player for Bedrock viewers, e.g. animation.player.sleeping. */
+    private void animate(CommandSender sender, String label, String[] args) {
+        org.bukkit.entity.Player target = args.length >= 3 ? plugin.getServer().getPlayerExact(args[2])
+                : sender instanceof org.bukkit.entity.Player self ? self : null;
+        if (args.length < 2 || target == null) {
+            sender.sendMessage("Usage: /" + label + " animate <animation> [player]");
+            return;
+        }
+        String animation = args[1].startsWith("animation.") ? args[1]
+                : dev.bedrockbundler.common.convert.EmoteConverter.animation(args[1]);
+        target.getScheduler().run(plugin, t -> sender.sendMessage("[BedrockBundler] " + animation + " sent to "
+                + plugin.emotePlayer().test(target, animation) + " Bedrock player(s)"), null);
     }
 
     private void status(CommandSender sender) {
@@ -44,12 +59,12 @@ final class BedrockBundlerCommand implements TabExecutor {
                     status.converted() ? "" : " (unchanged)"));
             sender.sendMessage("[BedrockBundler] Bundle hash: " + status.hash().substring(0, 12));
         }
-        if (plugin.modelCount() >= 0) {
-            sender.sendMessage("[BedrockBundler] Bedrock models mirrored now: " + plugin.modelCount());
-        }
         String mirrors = plugin.mirrorStatus();
         if (mirrors != null) {
             sender.sendMessage("[BedrockBundler] Bedrock mirrors: " + mirrors);
+        }
+        if (plugin.modelCount() >= 0) {
+            sender.sendMessage("[BedrockBundler] Bedrock models mirrored now: " + plugin.modelCount());
         }
         if (service.restartRequired()) {
             sender.sendMessage("[BedrockBundler] Geyser is running an older bundle; restart it to apply the new one.");
@@ -59,7 +74,7 @@ final class BedrockBundlerCommand implements TabExecutor {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return List.of("reload", "status").stream().filter(s -> s.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
+            return List.of("reload", "status", "animate").stream().filter(s -> s.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("reload")) {
             return List.of("-f");

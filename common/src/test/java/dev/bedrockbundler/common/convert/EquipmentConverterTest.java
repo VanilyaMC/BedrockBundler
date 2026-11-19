@@ -146,6 +146,43 @@ class EquipmentConverterTest {
         assertTrue(variants.stream().allMatch(IaItem::furniture));
     }
 
+    /**
+     * ItemsAdderAdditions' chair is drawn with the HEAD display (turned 180°, raised 8 px), not the fixed one;
+     * a thrown snowball item is drawn with the ground display.
+     */
+    @Test
+    void furniturePoseUsesTheEntityDisplay() throws IOException {
+        Map<String, byte[]> pack = new HashMap<>();
+        BufferedImage texture = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+        texture.setRGB(1, 1, 0xFF00FF00);
+        pack.put("assets/ia/textures/chair.png", Textures.png(texture));
+        String elements = "\"textures\": {\"0\": \"ia:chair\"}, \"elements\": [{\"from\": [0, 0, 0], \"to\": [16, 4, 2],"
+                + " \"faces\": {\"north\": {\"uv\": [0, 0, 16, 16], \"texture\": \"#0\"}}}]";
+        json(pack, "assets/ia/models/chair.json", "{" + elements + ", \"display\": {"
+                + "\"head\": {\"rotation\": [0, -180, 0], \"translation\": [0, 8, 0]},"
+                + " \"ground\": {\"scale\": [0.5, 0.5, 0.5]}}}");
+        json(pack, "assets/ia/items/chair.json", "{\"model\": {\"type\": \"model\", \"model\": \"ia:chair\"}}");
+        IaItem chair = new IaItem("ia:chair", "minecraft:paper", "ia:chair", null, "Chair", null, null, null, null, 0,
+                null, false, true).withEntityDisplay("head");
+        IaItem bomb = item("ia:bomb", "minecraft:snowball", "ia:chair", null, null);
+
+        Converter.Result result = Converter.convert(new ConversionInput(pack, List.of(chair, bomb), List.of()),
+                ConversionContext.Options.DEFAULT, "Test");
+        Map<String, byte[]> mcpack = JavaPack.readZip(new ByteArrayInputStream(result.mcpack()));
+        String root = dev.bedrockbundler.common.bedrock.GeometryConverter.ITEM_ROOT;
+
+        JsonObject chairPose = Json.parse(mcpack.get("animations/bedrockbundler/ia_chair.animation.json")).getAsJsonObject()
+                .getAsJsonObject("animations").getAsJsonObject("animation.bedrockbundler.ia_chair.furniture")
+                .getAsJsonObject("bones");
+        assertEquals(180f, chairPose.getAsJsonObject(root + "_y").getAsJsonArray("rotation").get(1).getAsFloat(), 1e-4);
+        assertEquals(8f, chairPose.getAsJsonObject(root + "_x").getAsJsonArray("position").get(1).getAsFloat(), 1e-4);
+
+        JsonObject bombPose = Json.parse(mcpack.get("animations/bedrockbundler/ia_bomb.animation.json")).getAsJsonObject()
+                .getAsJsonObject("animations").getAsJsonObject("animation.bedrockbundler.ia_bomb.furniture")
+                .getAsJsonObject("bones");
+        assertEquals(0.5f, bombPose.getAsJsonObject(root + "_z").getAsJsonArray("scale").get(0).getAsFloat(), 1e-4);
+    }
+
     @Test
     void glyphTitleOffsetsSumShifts() {
         Map<Integer, Integer> offsets = GlyphTitleOffsets.find(List.of(

@@ -27,7 +27,7 @@ class ConverterModelsTest {
     }
 
     private static Converter.Result convert(List<ModelInput> models) {
-        return Converter.convert(new ConversionInput(Map.of(), List.of(), List.of(), models),
+        return Converter.convert(new ConversionInput(Map.of(), List.of(), List.of(), List.of(), List.of(), models),
                 ConversionContext.Options.DEFAULT, "BedrockBundler");
     }
 

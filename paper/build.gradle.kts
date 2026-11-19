@@ -34,17 +34,17 @@ dependencies {
     compileOnly(libs.nexo) { isTransitive = false }
     compileOnly(itemsAdderJars)
 
-    "bettermodelCompileOnly"(sourceSets.main.get().output)
-    "bettermodelCompileOnly"(project(":common"))
-    "bettermodelCompileOnly"(libs.paper.api)
-    "bettermodelCompileOnly"(libs.bettermodel.api)
-    "bettermodelCompileOnly"(libs.bettermodel.bukkit.api)
-
     // compileOnly does not reach the test classpath; the display tests need Bukkit and Adventure classes.
     testImplementation(libs.paper.api)
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.launcher)
+
+    "bettermodelCompileOnly"(sourceSets.main.get().output)
+    "bettermodelCompileOnly"(project(":common"))
+    "bettermodelCompileOnly"(libs.paper.api)
+    "bettermodelCompileOnly"(libs.bettermodel.api)
+    "bettermodelCompileOnly"(libs.bettermodel.bukkit.api)
 }
 
 tasks.named<JavaCompile>("compileBettermodelJava") {

@@ -32,6 +32,35 @@ public final class ItemsAdderSource implements ContentSource {
         this.plugin = plugin;
         this.reader = new IaRegistryReader(plugin.getLogger());
         plugin.getServer().getPluginManager().registerEvents(new ItemsAdderListener(plugin), plugin);
+        if (plugin.getServer().getPluginManager().getPlugin("Geyser-Spigot") != null) {
+            // Emotes are played through Geyser's session, so only with Geyser on this server.
+            plugin.getServer().getPluginManager().registerEvents(
+                    new ItemsAdderEmotes(plugin.emotePlayer()), plugin);
+        }
+    }
+
+    @Override
+    public List<dev.bedrockbundler.common.input.EmoteAnimation> emotes() {
+        Plugin itemsAdder = plugin.getServer().getPluginManager().getPlugin("ItemsAdder");
+        if (itemsAdder == null) {
+            return List.of();
+        }
+        try {
+            // Content packs first: the converter keeps the first emote of a name.
+            List<dev.bedrockbundler.common.input.EmoteAnimation> emotes = new java.util.ArrayList<>(
+                    ItemsAdderEmotes.read(itemsAdder.getDataFolder().toPath().resolve("contents")));
+            // ItemsAdder's own emotes (wave, death, magic_trick_head...) live in its jar.
+            try (java.io.InputStream in = itemsAdder.getResource(ItemsAdderEmotes.BUILT_IN)) {
+                if (in != null) {
+                    emotes.add(new dev.bedrockbundler.common.input.EmoteAnimation("ItemsAdder.jar/" + ItemsAdderEmotes.BUILT_IN,
+                            new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)));
+                }
+            }
+            return emotes;
+        } catch (IOException e) {
+            plugin.getLogger().log(java.util.logging.Level.WARNING, "Could not read ItemsAdder emotes", e);
+            return List.of();
+        }
     }
 
     @Override

@@ -60,7 +60,8 @@ public final class Main {
         conversionOptions = conversionOptions.withGuiOffsets(0, folder.glyphOffsets());
         ConversionInput input = folder.input(generated);
         if (options.containsKey("models")) {
-            input = new ConversionInput(input.javaPack(), input.items(), input.blocks(), readModels(Path.of(options.get("models"))));
+            input = new ConversionInput(input.javaPack(), input.items(), input.blocks(),
+                    input.paintings(), input.emotes(), readModels(Path.of(options.get("models"))));
         }
         Converter.Result result = Converter.convert(input, conversionOptions, packName);
 

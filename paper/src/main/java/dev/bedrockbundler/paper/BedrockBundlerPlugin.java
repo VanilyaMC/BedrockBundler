@@ -26,10 +26,11 @@ public final class BedrockBundlerPlugin extends JavaPlugin {
     private Settings settings;
     private ConversionService conversion;
     private FurnitureMirror furniture;
-    private dev.bedrockbundler.paper.model.ModelMirror models;
     private DisplayMirrors displays;
+    private dev.bedrockbundler.paper.model.ModelMirror models;
     private BedrockPlayers bedrockPlayers;
     private ContentSource source;
+    private EmotePlayer emotePlayer;
 
     @Override
     public void onEnable() {
@@ -71,6 +72,17 @@ public final class BedrockBundlerPlugin extends JavaPlugin {
                 furniture = new FurnitureMirror(this, bedrock, source, settings.furnitureYawOffset(), settings.furnitureYOffset());
                 furniture.start();
                 getLogger().info("Showing " + source.pluginName() + " furniture to Bedrock players (detected via " + bedrock.source() + ")");
+            }
+        }
+
+        if (settings.displays().any()) {
+            if (bedrockPlayers == null) {
+                getLogger().warning("Display mirrors for Bedrock need Floodgate or Geyser-Spigot on this server; they are disabled.");
+            } else {
+                displays = new DisplayMirrors(this, bedrockPlayers, source, settings.displays(),
+                        settings.furnitureYawOffset(), settings.furnitureYOffset());
+                displays.start();
+                getLogger().info("Showing display entities and item frames to Bedrock players (detected via " + bedrockPlayers.source() + ")");
             }
         }
 
@@ -259,6 +271,14 @@ public final class BedrockBundlerPlugin extends JavaPlugin {
 
     public boolean autoConvert() {
         return settings.autoConvert();
+    }
+
+    /** Plays emotes for Bedrock players through Geyser on this server; one per plugin. */
+    public synchronized EmotePlayer emotePlayer() {
+        if (emotePlayer == null) {
+            emotePlayer = new EmotePlayer(this);
+        }
+        return emotePlayer;
     }
 
     ContentSource source() {
