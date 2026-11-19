@@ -47,6 +47,10 @@ final class BedrockBundlerCommand implements TabExecutor {
         if (plugin.modelCount() >= 0) {
             sender.sendMessage("[BedrockBundler] Bedrock models mirrored now: " + plugin.modelCount());
         }
+        String mirrors = plugin.mirrorStatus();
+        if (mirrors != null) {
+            sender.sendMessage("[BedrockBundler] Bedrock mirrors: " + mirrors);
+        }
         if (service.restartRequired()) {
             sender.sendMessage("[BedrockBundler] Geyser is running an older bundle; restart it to apply the new one.");
         }

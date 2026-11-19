@@ -150,6 +150,14 @@ public final class Converter {
         if (!input.models().isEmpty()) {
             try {
                 models = ModelConverter.convert(input.models(), bedrockPack, log);
+                for (ModelSpec spec : models) {
+                    // Geyser documents int entity properties beyond +-1,000,000 as not recommended; the 24 bit flag words
+                    // of a model with more than 20 bones or animations can pass that. Untested on a real client.
+                    if (spec.bones().size() > 20 || spec.animations().size() > 20) {
+                        log.warn("model " + spec.id() + " has more than 20 bones or animations: flag bits above 2^20 exceed the "
+                                + "int property range Geyser recommends and may not show correctly on Bedrock");
+                    }
+                }
             } catch (RuntimeException e) {
                 log.warn("Model conversion failed: " + e);
             }

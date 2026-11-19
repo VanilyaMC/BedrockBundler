@@ -27,6 +27,7 @@ public final class BedrockBundlerPlugin extends JavaPlugin {
     private ConversionService conversion;
     private FurnitureMirror furniture;
     private dev.bedrockbundler.paper.model.ModelMirror models;
+    private DisplayMirrors displays;
     private BedrockPlayers bedrockPlayers;
     private ContentSource source;
 
@@ -92,6 +93,9 @@ public final class BedrockBundlerPlugin extends JavaPlugin {
         }
         if (furniture != null) {
             furniture.stop();
+        }
+        if (displays != null) {
+            displays.stop();
         }
         if (conversion != null) {
             conversion.shutdown();
@@ -259,6 +263,18 @@ public final class BedrockBundlerPlugin extends JavaPlugin {
 
     ContentSource source() {
         return source;
+    }
+
+    /** Mirror stands alive per kind, for {@code /bedrockbundler status}; null when nothing is mirrored. */
+    String mirrorStatus() {
+        StringBuilder line = new StringBuilder();
+        if (furniture != null) {
+            line.append(furniture.count()).append(" furniture");
+        }
+        if (displays != null) {
+            line.append(line.isEmpty() ? "" : ", ").append(displays.statusLine());
+        }
+        return line.isEmpty() ? null : line.toString();
     }
 
     private void reply(CommandSender sender, String message) {

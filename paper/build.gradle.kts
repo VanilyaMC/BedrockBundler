@@ -39,6 +39,12 @@ dependencies {
     "bettermodelCompileOnly"(libs.paper.api)
     "bettermodelCompileOnly"(libs.bettermodel.api)
     "bettermodelCompileOnly"(libs.bettermodel.bukkit.api)
+
+    // compileOnly does not reach the test classpath; the display tests need Bukkit and Adventure classes.
+    testImplementation(libs.paper.api)
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.launcher)
 }
 
 tasks.named<JavaCompile>("compileBettermodelJava") {
