@@ -141,18 +141,46 @@ public final class BedrockBundlerExtension implements Extension {
             return;
         }
         int registered = 0;
+        boolean dyeable = dyeableSupported();
+        boolean warned = false;
         for (ItemSpec spec : bundle.items()) {
+            if (spec.dyedIcon() != null && !dyeable && !warned) {
+                warned = true;
+                logger().warning("This Geyser is older than 2.12 and cannot make custom items dyeable: dyed items keep their "
+                        + "undyed look. Update Geyser to dye them.");
+            }
             try {
-                event.register(Identifier.of(spec.javaItem()), definition(spec));
+                event.register(Identifier.of(spec.javaItem()), definition(spec, dyeable));
                 registered++;
-            } catch (RuntimeException e) {
-                logger().warning("Could not register item " + spec.bedrockId() + ": " + e.getMessage());
+            } catch (RuntimeException | LinkageError e) {
+                logger().warning("Could not register item " + spec.bedrockId() + ": " + e);
             }
         }
         logger().info("Registered " + registered + " custom items");
     }
 
-    private static CustomItemDefinition definition(ItemSpec spec) {
+    /** Dyeable custom items and their dyed icons came with Geyser 2.12; older API jars lack the methods. */
+    private static boolean dyeableSupported() {
+        try {
+            CustomItemBedrockOptions.Builder.class.getMethod("dyeable", int.class);
+            Class.forName("org.geysermc.geyser.api.item.custom.v2.CustomItemIcons");
+            return true;
+        } catch (ReflectiveOperationException | LinkageError e) {
+            return false;
+        }
+    }
+
+    /** Only loaded when the Geyser API has dyeable items, so older Geysers never resolve its classes. */
+    private static final class Dyeable {
+
+        static void apply(CustomItemBedrockOptions.Builder options, ItemSpec spec) {
+            options.dyeable(0xFFFFFF);
+            options.icons(org.geysermc.geyser.api.item.custom.v2.CustomItemIcons.builder()
+                    .defaultIcon(spec.icon()).dyedIcon(spec.dyedIcon()).build());
+        }
+    }
+
+    private static CustomItemDefinition definition(ItemSpec spec, boolean dyeable) {
         CustomItemBedrockOptions.Builder options = CustomItemBedrockOptions.builder()
                 .icon(spec.icon())
                 .allowOffhand(true)
@@ -160,6 +188,11 @@ public final class BedrockBundlerExtension implements Extension {
                 .creativeCategory(category(spec.creativeCategory()));
         if (spec.protection() > 0) {
             options.protectionValue(spec.protection());
+        }
+        if (dyeable && spec.dyedIcon() != null) {
+            // Marks the item dyeable on Bedrock, white by default so an undyed item keeps its texture; Geyser sends
+            // the Java dyed_color as the item's customColor, and the client tints the dyed (grayscale) icon with it.
+            Dyeable.apply(options, spec);
         }
         if (spec.tags() != null) {
             for (String tag : spec.tags()) {

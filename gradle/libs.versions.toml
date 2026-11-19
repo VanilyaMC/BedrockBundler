@@ -1,6 +1,6 @@
 [versions]
 paper = "1.21.4-R0.1-SNAPSHOT"
-geyser = "2.11.0-SNAPSHOT"
+geyser = "2.12.0-SNAPSHOT"
 floodgate = "2.2.5-SNAPSHOT"
 gson = "2.11.0"
 snakeyaml = "2.3"

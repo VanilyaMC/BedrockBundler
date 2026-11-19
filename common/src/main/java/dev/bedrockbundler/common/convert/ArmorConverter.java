@@ -68,7 +68,20 @@ final class ArmorConverter {
      * {@code enchanted} entries. {@code controller} draws it whenever the item is not held in a hand.
      */
     record Worn(JsonObject materials, JsonObject textures, JsonObject geometry, JsonArray preAnimation,
-                String parentSetup, JsonObject animations, JsonArray animate, String controller) {
+                String parentSetup, JsonObject animations, JsonArray animate, String controller, Dyed dyed) {
+
+        Worn(JsonObject materials, JsonObject textures, JsonObject geometry, JsonArray preAnimation,
+             String parentSetup, JsonObject animations, JsonArray animate, String controller) {
+            this(materials, textures, geometry, preAnimation, parentSetup, animations, animate, controller, null);
+        }
+    }
+
+    /**
+     * A worn layer Bedrock can dye (Java: an equipment layer with {@code dyeable}).
+     *
+     * @param slot armor slot index {@code query.armor_color_slot} takes (0 head, 1 chest, 2 legs, 3 feet)
+     */
+    record Dyed(int slot) {
     }
 
     /** Shared controller for player armor and wings: {@code controller.render.armor} on the worn keys. */
@@ -161,12 +174,74 @@ final class ArmorConverter {
             return null;
         }
         String bedrockTexture = "textures/" + ConversionContext.NAMESPACE + "/armor/" + flat;
+        JsonObject materials = ItemConverter.stringMap("armor", "armor", "armor_enchanted", "armor_enchanted");
+        JsonObject textures = ItemConverter.stringMap("armor", bedrockTexture, "armor_glint", ARMOR_GLINT);
+        String controller = ARMOR_CONTROLLER;
+        Dyed dyed = null;
+        JsonObject dyeable = dyeableLayer(equipment, slot.javaLayer());
+        if (dyeable != null) {
+            // Leather style: the layer is a grayscale texture tinted with the item's dye colour; the layers after it
+            // (leather_overlay) are not tinted on Java.
+            int undyed = DyeSupport.color(dyeable.get("color_when_undyed"), 0);
+            BufferedImage plain = null;
+            BufferedImage gray = null;
+            int overlays = 0;
+            for (JsonElement entry : Json.array(Json.object(equipment, "layers"), slot.javaLayer())) {
+                BufferedImage layer = entry.isJsonObject() ? layerImage(entry.getAsJsonObject(), slot.javaLayer()) : null;
+                if (layer == null) {
+                    continue;
+                }
+                boolean dye = entry.getAsJsonObject().get("dyeable") instanceof JsonObject;
+                plain = plain == null ? (dye ? DyeSupport.multiply(layer, undyed) : layer)
+                        : DyeSupport.over(plain, dye ? DyeSupport.multiply(layer, undyed) : layer);
+                gray = gray == null ? (dye ? DyeSupport.gray(layer) : layer) : DyeSupport.over(gray, dye ? DyeSupport.gray(layer) : layer);
+                overlays += dye ? 0 : 1;
+            }
+            if (plain != null) {
+                image = plain;
+                if (overlays > 0) {
+                    ctx.log().warn("Armor " + bedrockId + ": the overlay layers of " + assetId + " get the dye colour too on Bedrock");
+                }
+                ctx.bedrockPack().file(bedrockTexture + "_dyed.tga", Textures.tga(gray));
+                materials.addProperty("armor_dyed", DyeSupport.DYED_MATERIAL);
+                textures.addProperty("armor_dyed", bedrockTexture + "_dyed.tga");
+                controller = DyeSupport.ARMOR_CONTROLLER;
+                dyed = new Dyed(SLOT_INDEX.get(equipSlot));
+                DyeSupport.writeControllers(ctx);
+            }
+        }
         ctx.bedrockPack().file(bedrockTexture + ".png", Textures.png(image));
         writeArmorController();
-        return new Worn(ItemConverter.stringMap("armor", "armor", "armor_enchanted", "armor_enchanted"),
-                ItemConverter.stringMap("armor", bedrockTexture, "armor_glint", ARMOR_GLINT),
+        return new Worn(materials, textures,
                 ItemConverter.stringMap("armor", slot.geometry()), new JsonArray(),
-                "v." + slot.layerVariable() + " = 0.0;", new JsonObject(), new JsonArray(), ARMOR_CONTROLLER);
+                "v." + slot.layerVariable() + " = 0.0;", new JsonObject(), new JsonArray(), controller, dyed);
+    }
+
+    /** Armor slot index of {@code query.armor_color_slot}. */
+    private static final Map<String, Integer> SLOT_INDEX = Map.of("head", 0, "chest", 1, "legs", 2, "feet", 3);
+
+    /** The first {@code dyeable} entry of an equipment layer, or null. */
+    private static JsonObject dyeableLayer(JsonObject equipment, String layer) {
+        JsonArray entries = Json.array(Json.object(equipment, "layers"), layer);
+        if (entries == null) {
+            return null;
+        }
+        for (JsonElement entry : entries) {
+            if (entry.isJsonObject() && entry.getAsJsonObject().get("dyeable") instanceof JsonObject dyeable
+                    && Json.string(entry.getAsJsonObject(), "texture", null) != null) {
+                return dyeable;
+            }
+        }
+        return null;
+    }
+
+    private BufferedImage layerImage(JsonObject entry, String javaLayer) {
+        String textureId = Json.string(entry, "texture", null);
+        if (textureId == null) {
+            return null;
+        }
+        ResourceId texture = ResourceId.parse(textureId);
+        return ctx.textures().load(texture.namespace() + ":entity/equipment/" + javaLayer + "/" + texture.path());
     }
 
     /**

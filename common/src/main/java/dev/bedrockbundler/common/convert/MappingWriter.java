@@ -33,7 +33,18 @@ public final class MappingWriter {
             }
 
             JsonObject options = new JsonObject();
-            options.addProperty("icon", item.icon());
+            if (item.dyedIcon() != null) {
+                // Geyser 2.12 mappings: a dyeable item with a grayscale icon the client tints with the item's colour.
+                JsonObject icons = new JsonObject();
+                icons.addProperty("default", item.icon());
+                icons.addProperty("dyed", item.dyedIcon());
+                options.add("icons", icons);
+                JsonObject dyeable = new JsonObject();
+                dyeable.addProperty("default_color", "#FFFFFF");
+                options.add("dyeable", dyeable);
+            } else {
+                options.addProperty("icon", item.icon());
+            }
             options.addProperty("creative_category", item.creativeCategory());
             if (item.handheld()) {
                 options.addProperty("display_handheld", true);
