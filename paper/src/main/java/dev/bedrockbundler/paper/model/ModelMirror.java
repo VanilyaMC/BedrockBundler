@@ -46,7 +46,7 @@ public final class ModelMirror implements Listener {
     /** Ticks between syncs of position, viewers and state. */
     private static final long PERIOD = 2;
     /** Ticks between full state resends (heals a spawn that raced the first state). */
-    private static final int RESEND_TICKS = 20;
+    private static final int RESEND_TICKS = 100;
     private static final int PENDING_ATTEMPTS = 100;
 
     private final JavaPlugin plugin;
