@@ -25,7 +25,8 @@ public final class BedrockPack {
     /** Path length the Bedrock client no longer loads (see {@link #shortPath}). */
     static final int MAX_PATH = 80;
     private static final String[] DEFINITION_FOLDERS = {
-            "attachables", "animations", "animation_controllers", "render_controllers", "models/entity", "models/blocks"};
+            "attachables", "animations", "animation_controllers", "render_controllers", "models/entity", "models/blocks",
+            "entity"};
 
     private final Map<String, byte[]> files = new TreeMap<>();
     private final JsonObject itemTextures = new JsonObject();
@@ -42,6 +43,13 @@ public final class BedrockPack {
 
     public boolean has(String path) {
         return files.containsKey(path);
+    }
+
+    /** The files added with {@link #file}/{@link #json} under the path they get in the pack (see {@link #shortPath}). */
+    public Map<String, byte[]> packedFiles() {
+        Map<String, byte[]> result = new TreeMap<>();
+        files.forEach((path, bytes) -> result.put(shortPath(path), bytes));
+        return result;
     }
 
     /** Registers {@code key} in {@code item_texture.json}; {@code path} is relative to the pack root, without extension. */
